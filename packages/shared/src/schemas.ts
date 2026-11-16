@@ -21,8 +21,8 @@ export const slugSchema = z
   .string()
   .trim()
   .toLowerCase()
-  .min(3)
-  .max(48)
+  .min(3, "Use at least 3 characters")
+  .max(48, "Use at most 48 characters")
   .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, "Use lowercase letters, numbers and hyphens");
 
 export const paginationQuerySchema = z.object({
@@ -136,7 +136,7 @@ export const organizationSettingsSchema = z.object({
 export type OrganizationSettings = z.infer<typeof organizationSettingsSchema>;
 
 export const createOrganizationSchema = z.object({
-  name: z.string().trim().min(3).max(120),
+  name: z.string().trim().min(3, "Enter a name of at least 3 characters").max(120),
   slug: slugSchema,
   type: z.enum(ORGANIZATION_TYPES),
   description: z.string().trim().max(1000).optional(),

@@ -6,21 +6,23 @@ CivicPulse is a multi-tenant platform for community issue reporting: citizens re
 problems such as potholes, broken streetlights or water leaks; organizations verify,
 assign and resolve them; everyone can follow the progress.
 
-> **Project status: Phase 1 of 6 complete.** Accounts, organizations, roles and
-> tenant isolation work end to end and are tested. Complaint reporting and everything
-> after it is not built yet. The honest, itemized ledger is
+> **Project status: Phases 0–2 of 6 complete.** The product works end to end on
+> PostgreSQL alone: report → verify → assign → work → resolve → confirm, with
+> notifications, public tracking and live analytics. Redis, Kafka, OpenSearch, R2,
+> observability and deployment are not built yet. The itemized ledger is
 > [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
 
 ## What works today
 
-- Citizen and staff accounts: registration, sign-in, password change and reset,
-  device/session management, account deletion (anonymization).
-- Organizations: self-service creation with seeded categories and resolution targets,
-  profile and settings, member listing.
-- Five roles with a permission matrix; organization data isolated by PostgreSQL
-  row-level security.
-- Web app: landing page, auth screens, role-aware dashboard, settings. Responsive.
-- REST API with generated OpenAPI docs at `/api/docs`.
+- **Citizens:** register, report an issue (category, description, location, map pin,
+  photos), get a tracking ID, follow status, reply, reopen, rate the resolution.
+- **Administrators and department managers:** triage queue, verify/reject, assign to a
+  department and worker, set priority, internal notes, departments, category routing,
+  member roles, audit log, dashboard with real figures.
+- **Field workers:** assigned work ordered by deadline, accept, progress, upload evidence, resolve.
+- **Public:** track any report by ID without an account; no personal data is shown.
+- **Platform:** multi-tenant isolation by PostgreSQL row-level security, append-only
+  history, transactional outbox with retries and dead-lettering, OpenAPI docs at `/api/docs`.
 
 ## Requirements
 

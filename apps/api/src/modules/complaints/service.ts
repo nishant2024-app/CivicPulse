@@ -528,6 +528,8 @@ async function applyTransition(
   note: string | undefined,
   meta: RequestMeta,
   extra: Partial<ComplaintRow> = {},
+  /** Staff-only text passed to notifications but kept out of the reporter-visible history. */
+  staffNote?: string,
 ): Promise<ComplaintRow> {
   const actor = actorFor(ctx.auth, complaint);
   const check = checkTransition(complaint.status, to, actor, note);
@@ -618,7 +620,7 @@ async function applyTransition(
   });
   // Notify with the pre-reopen assignee so the previous worker hears about it.
   await emitComplaintEvent(tx, ctx, STATUS_EVENT[to], updated, meta, {
-    note: note?.trim() || null,
+    note: staffNote?.trim() || note?.trim() || null,
     ...(to === "REOPENED" ? { assignedWorkerId: complaint.assignedWorkerId } : {}),
   });
   await recordAudit(tx, {
@@ -744,7 +746,8 @@ export async function assignComplaint(
         requestId: meta.requestId,
       });
     } else {
-      await applyTransition(tx, ctx, complaint, "ASSIGNED", input.note, meta, routing);
+      // Instructions live on the assignment row; the status history stays note-free.
+      await applyTransition(tx, ctx, complaint, "ASSIGNED", undefined, meta, routing, input.note);
     }
   });
 }

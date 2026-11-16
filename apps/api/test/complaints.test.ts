@@ -151,6 +151,8 @@ describe("complaint lifecycle", () => {
       "RESOLVED",
     ]);
     expect(citizenView.assignment).toBeNull(); // completed
+    // Staff instructions never reach the reporter, in any field.
+    expect(JSON.stringify(citizenView)).not.toContain("cold-mix asphalt");
     expect(citizenView.actions.transitions.map((t: { to: string }) => t.to)).toEqual([
       "CLOSED",
       "REOPENED",

@@ -1,42 +1,44 @@
 @import "tailwindcss";
 
-/* Workspace packages are outside this app's directory; tell Tailwind nothing there has classes. */
-
+/*
+ * Visual identity: public-works signage.
+ * Archivo (wide, heavy) for headings like a works notice; IBM Plex Sans for reading;
+ * IBM Plex Mono for anything that is a reference — tracking IDs, timestamps, counts.
+ * Square corners and ruled lines instead of soft cards. Navy carries structure, blue
+ * carries action, hazard amber marks the thing that needs attention.
+ */
 @theme {
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-display: "Archivo Variable", "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
 
-  /* Brand: deep navy carries structure, blue carries action. */
-  --color-navy-950: #081226;
-  --color-navy-900: #0c1a36;
-  --color-navy-800: #12264d;
-  --color-navy-700: #1a3566;
-  --color-brand-700: #1c46b8;
-  --color-brand-600: #2457d6;
-  --color-brand-500: #3d6ff0;
-  --color-brand-100: #dbe6ff;
-  --color-brand-50: #eff4ff;
+  --color-navy-950: #060f26;
+  --color-navy-900: #0a1a3f;
+  --color-navy-800: #10265a;
+  --color-navy-700: #1a3678;
+  --color-brand-700: #1740b0;
+  --color-brand-600: #1f4fd8;
+  --color-brand-500: #3d6cf0;
+  --color-brand-100: #d5e0ff;
+  --color-brand-50: #edf2ff;
+  --color-signal: #f5b301;
+  --color-signal-soft: #fff3cc;
 
-  /* Surfaces and text */
-  --color-canvas: #f5f7fb;
+  --color-canvas: #f1f2ee;
   --color-surface: #ffffff;
-  --color-line: #e2e8f1;
-  --color-line-strong: #cbd4e2;
-  --color-ink: #0f1b33;
-  --color-ink-soft: #3a4763;
-  --color-muted: #64718b;
+  --color-line: #d9dbd3;
+  --color-line-strong: #b4b8ad;
+  --color-ink: #0e1730;
+  --color-ink-soft: #36405a;
+  --color-muted: #646c80;
 
-  /* Semantic */
-  --color-success-700: #14713d;
-  --color-success-50: #e8f6ee;
-  --color-warning-700: #975a05;
-  --color-warning-50: #fdf3e0;
-  --color-danger-700: #b3261e;
-  --color-danger-600: #c93a31;
-  --color-danger-50: #fdecea;
-
-  --radius-card: 0.75rem;
-  --shadow-card: 0 1px 2px rgb(15 27 51 / 0.04), 0 1px 3px rgb(15 27 51 / 0.06);
+  --color-success-700: #0f6b3a;
+  --color-success-50: #e3f4ea;
+  --color-warning-700: #8a5200;
+  --color-warning-50: #fff3cc;
+  --color-danger-700: #a8201a;
+  --color-danger-600: #c2352c;
+  --color-danger-50: #fbe9e7;
 }
 
 @layer base {
@@ -47,10 +49,19 @@
     background-color: var(--color-canvas);
     color: var(--color-ink);
     font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    font-stretch: 108%;
+    letter-spacing: -0.015em;
+  }
   :focus-visible {
-    outline: 2px solid var(--color-brand-500);
+    outline: 2px solid var(--color-brand-600);
     outline-offset: 2px;
   }
   @media (prefers-reduced-motion: reduce) {
@@ -61,4 +72,20 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+@utility label-mono {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Hazard stripe used sparingly: overdue markers and the landing hero edge. */
+@utility hazard {
+  background-image: repeating-linear-gradient(
+    -45deg,
+    var(--color-signal) 0 8px,
+    var(--color-navy-950) 8px 16px
+  );
 }

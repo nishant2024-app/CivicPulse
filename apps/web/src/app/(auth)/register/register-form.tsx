@@ -70,7 +70,7 @@ export function RegisterForm() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Create your account</h1>
+      <h1 className="text-[26px] font-extrabold text-ink">Create your account</h1>
       <p className="mt-1.5 text-sm text-muted">
         Already registered?{" "}
         <Link href="/login" className="font-medium text-brand-600 hover:underline">

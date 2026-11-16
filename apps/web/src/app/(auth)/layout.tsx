@@ -10,7 +10,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           <Logo inverted />
         </Link>
         <div>
-          <p className="text-3xl leading-snug font-semibold tracking-tight text-balance">
+          <p className="font-display text-4xl leading-[1.08] font-extrabold text-balance [font-stretch:112%]">
             The shortest path between &ldquo;this is broken&rdquo; and &ldquo;this is fixed&rdquo;.
           </p>
           <p className="mt-4 max-w-md text-white/65">

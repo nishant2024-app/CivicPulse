@@ -85,7 +85,7 @@ function ResetForm() {
 export default function ResetPasswordPage() {
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Choose a new password</h1>
+      <h1 className="text-[26px] font-extrabold text-ink">Choose a new password</h1>
       <p className="mt-1.5 text-sm text-muted">
         You will be signed out everywhere and can sign in again with the new password.
       </p>

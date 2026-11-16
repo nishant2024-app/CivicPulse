@@ -1,25 +1,33 @@
 import { cn } from "@/lib/utils";
 
+/** Wordmark with a pulse trace cut into a road-sign plate. */
 export function Logo({ className, inverted }: { className?: string; inverted?: boolean }) {
   return (
-    <span className={cn("inline-flex items-center gap-2 font-semibold tracking-tight", className)}>
-      <svg viewBox="0 0 32 32" className="size-7" aria-hidden>
+    <span className={cn("inline-flex items-center gap-2.5", className)}>
+      <svg viewBox="0 0 34 26" className="h-[22px] w-auto" aria-hidden>
         <rect
-          width="32"
-          height="32"
-          rx="8"
-          className={inverted ? "fill-white/10" : "fill-navy-900"}
+          width="34"
+          height="26"
+          rx="2"
+          className={inverted ? "fill-signal" : "fill-navy-900"}
         />
         <path
-          d="M5 17h5l2.5-7 4.5 13 3-9 1.5 3H27"
+          d="M4 14h6l2.5-7 5 13 3.5-9 1.5 3H30"
           fill="none"
-          stroke="#6f97ff"
-          strokeWidth="2.4"
-          strokeLinecap="round"
-          strokeLinejoin="round"
+          className={inverted ? "stroke-navy-950" : "stroke-signal"}
+          strokeWidth="2.6"
+          strokeLinecap="square"
+          strokeLinejoin="miter"
         />
       </svg>
-      <span className={inverted ? "text-white" : "text-navy-900"}>CivicPulse</span>
+      <span
+        className={cn(
+          "font-display text-[17px] font-extrabold tracking-tight [font-stretch:112%]",
+          inverted ? "text-white" : "text-navy-900",
+        )}
+      >
+        CivicPulse
+      </span>
     </span>
   );
 }

@@ -38,7 +38,7 @@ export function LoginForm() {
 
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight text-ink">Sign in</h1>
+      <h1 className="text-[26px] font-extrabold text-ink">Sign in</h1>
       <p className="mt-1.5 text-sm text-muted">
         New here?{" "}
         <Link href="/register" className="font-medium text-brand-600 hover:underline">

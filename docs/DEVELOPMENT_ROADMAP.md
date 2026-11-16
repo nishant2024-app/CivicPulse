@@ -60,10 +60,27 @@ Deviations from the Phase 0 documents, corrected in those documents:
 
 ## Phase 2 — Core business features
 
-Organizations, invitations, departments, categories, SLA policies, complaint reporting,
-status machine, assignments, comments, attachments (local storage), public tracking,
-feedback, citizen dashboard, staff dashboard, field worker view, audit log viewer.
-**planned**
+| Item                                                                                                                   | Status               | Evidence                                                                              |
+| ---------------------------------------------------------------------------------------------------------------------- | -------------------- | ------------------------------------------------------------------------------------- |
+| Complaint reporting, role-scoped list with full-text search, detail                                                    | tested               | `apps/api/test/complaints.test.ts`, `e2e/lifecycle.spec.ts`                           |
+| Status machine with immutable history, SLA deadline at verification, reopen window                                     | tested               | same                                                                                  |
+| Assignment, acceptance, reassignment; staff instructions hidden from reporters                                         | tested               | same                                                                                  |
+| Comments with internal notes, feedback rating                                                                          | tested               | same                                                                                  |
+| Photo upload: magic-byte check, re-encode (EXIF removed), size limit, signed URLs                                      | tested               | same (local disk storage driver)                                                      |
+| Public tracking with privacy allow-list                                                                                | tested               | same                                                                                  |
+| Departments, category routing, member roles, audit log                                                                 | tested               | same                                                                                  |
+| Analytics computed from records (overview, departments, categories, trends, hotspots)                                  | tested               | same                                                                                  |
+| Transactional outbox, in-process relay, idempotent consumers, retry, dead-letter                                       | tested               | same ("event processing" tests)                                                       |
+| In-app notifications (event-driven)                                                                                    | tested               | same                                                                                  |
+| Web: report form, lists, detail with actions, dashboards per role, departments, people, notifications, audit, tracking | tested               | 12 browser tests, desktop and mobile                                                  |
+| Map pin on the report form (MapLibre + OpenFreeMap)                                                                    | implemented-untested | Tile host is not reachable from the build environment; the form works without the map |
+| Hotspot **map** view                                                                                                   | planned              | API exists; no map visualization yet                                                  |
+| Invitations by email, SLA policy editor, notification preferences UI                                                   | planned              | Tables exist; members are added by registering and being promoted                     |
+
+Test totals at the end of Phase 2: 16 unit, 72 API/database integration, 12 end-to-end.
+
+Pulled forward from Phase 3: the outbox, the in-process ("memory") event relay and the
+notification consumer, because notifications are part of the core experience.
 
 ## Phase 3 — Distributed systems
 

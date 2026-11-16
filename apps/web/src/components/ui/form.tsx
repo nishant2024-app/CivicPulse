@@ -10,7 +10,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 const control =
-  "w-full rounded-lg border border-line-strong bg-surface px-3 text-sm text-ink placeholder:text-muted transition-colors focus-visible:border-brand-500 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-brand-100 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger-600";
+  "w-full rounded-[3px] border border-line-strong bg-surface px-3 text-[15px] text-ink placeholder:text-muted transition-colors focus-visible:border-brand-600 focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-brand-100 disabled:cursor-not-allowed disabled:bg-canvas disabled:text-muted aria-[invalid=true]:border-danger-600";
 
 export function Input({
   className,
@@ -35,7 +35,7 @@ export function Select({
 
 export function Label({ className, ...props }: ComponentProps<typeof LabelPrimitive.Root>) {
   return (
-    <LabelPrimitive.Root className={cn("text-sm font-medium text-ink", className)} {...props} />
+    <LabelPrimitive.Root className={cn("text-sm font-semibold text-ink", className)} {...props} />
   );
 }
 

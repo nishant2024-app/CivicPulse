@@ -284,7 +284,7 @@ function DeleteAccountCard() {
   });
 
   return (
-    <Card className="border-danger-700/25">
+    <Card className="border-danger-600">
       <CardHeader
         title="Delete account"
         description="Your name, email and phone are erased and you are signed out everywhere. Reports you filed stay with the organization, without your identity."

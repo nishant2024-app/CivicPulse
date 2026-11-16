@@ -19,8 +19,8 @@ export function DialogContent({
 }) {
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-navy-950/50" />
-      <DialogPrimitive.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-(--radius-card) border border-line bg-surface p-6 shadow-xl">
+      <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-navy-950/60" />
+      <DialogPrimitive.Content className="fixed top-1/2 left-1/2 z-50 w-[calc(100%-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 border-t-4 border-navy-900 bg-surface p-6 shadow-2xl">
         <DialogPrimitive.Title className="text-base font-semibold text-ink">
           {title}
         </DialogPrimitive.Title>

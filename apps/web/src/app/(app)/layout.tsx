@@ -27,8 +27,8 @@ export default function AuthenticatedLayout({ children }: { children: ReactNode 
 
   if (!me.data) {
     return (
-      <div className="min-h-dvh lg:pl-64" aria-busy="true" aria-label="Loading">
-        <div className="fixed inset-y-0 left-0 hidden w-64 bg-navy-900 lg:block" />
+      <div className="min-h-dvh lg:pl-60" aria-busy="true" aria-label="Loading">
+        <div className="fixed inset-y-0 left-0 hidden w-60 bg-navy-900 lg:block" />
         <div className="h-14 border-b border-line bg-surface" />
         <div className="mx-auto max-w-6xl space-y-4 px-4 py-8 sm:px-6">
           <Skeleton className="h-8 w-56" />

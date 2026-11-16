@@ -9,9 +9,11 @@ const PROTECTED = [
   "/settings",
   "/organizations",
   "/complaints",
-  "/admin",
-  "/notifications",
   "/report",
+  "/notifications",
+  "/departments",
+  "/members",
+  "/audit",
 ];
 const GUEST_ONLY = ["/login", "/register"];
 

@@ -28,14 +28,16 @@ type Method = "GET" | "POST" | "PATCH" | "PUT" | "DELETE";
 async function request<T>(method: Method, path: string, body?: unknown): Promise<T> {
   const headers: Record<string, string> = { accept: "application/json" };
   if (method !== "GET") headers[CSRF_HEADER] = CSRF_HEADER_VALUE;
-  if (body !== undefined) headers["content-type"] = "application/json";
+  const isForm = typeof FormData !== "undefined" && body instanceof FormData;
+  // The browser sets the multipart boundary itself.
+  if (body !== undefined && !isForm) headers["content-type"] = "application/json";
 
   let response: Response;
   try {
     response = await fetch(`/api/v1${path}`, {
       method,
       headers,
-      body: body === undefined ? undefined : JSON.stringify(body),
+      body: body === undefined ? undefined : isForm ? (body as FormData) : JSON.stringify(body),
       credentials: "same-origin",
     });
   } catch {
@@ -73,6 +75,11 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body ?? {}),
   put: <T>(path: string, body?: unknown) => request<T>("PUT", path, body ?? {}),
   delete: <T>(path: string, body?: unknown) => request<T>("DELETE", path, body),
+  upload: <T>(path: string, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return request<T>("POST", path, form);
+  },
 };
 
 export function errorMessage(error: unknown): string {
