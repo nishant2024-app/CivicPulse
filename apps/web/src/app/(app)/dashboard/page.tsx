@@ -271,7 +271,7 @@ function StaffAnalytics({ me }: { me: Me }) {
               }
             />
           ) : (
-            <div className="overflow-x-auto">
+            <div className="relative overflow-x-auto">
               <table className="w-full min-w-[34rem] text-sm">
                 <thead>
                   <tr className="border-b border-line text-left">
