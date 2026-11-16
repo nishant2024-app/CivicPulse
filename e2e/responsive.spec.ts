@@ -22,13 +22,20 @@ test("mobile: menu navigation works and no page overflows sideways", async ({ pa
   await expect(page.getByRole("heading", { level: 1, name: "Overview" })).toBeVisible();
   expect(await overflow()).toBeLessThanOrEqual(0);
 
-  for (const destination of ["Report an issue", "Reports", "People", "Settings"]) {
+  const destinations = [
+    ["Report an issue", "/report"],
+    ["Reports", "/complaints"],
+    ["People", "/members"],
+    ["Settings", "/settings"],
+  ] as const;
+  for (const [destination, path] of destinations) {
     await page.getByRole("button", { name: "Open menu" }).click();
     await page
       .getByRole("dialog", { name: "Menu" })
       .getByRole("link", { name: destination, exact: true })
       .click();
     await expect(page.getByRole("dialog", { name: "Menu" })).toHaveCount(0);
+    await expect(page).toHaveURL(new RegExp(`${path}$`), { timeout: 20_000 });
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     expect(await overflow(), `${destination} overflows`).toBeLessThanOrEqual(0);
   }

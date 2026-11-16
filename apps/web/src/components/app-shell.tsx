@@ -21,7 +21,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import type { Me, Permission } from "@civicpulse/shared";
 import { Logo } from "@/components/logo";
@@ -248,8 +248,6 @@ function UserMenu({ me }: { me: Me }) {
 
 export function AppShell({ me, children }: { me: Me; children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-  const pathname = usePathname();
-  useEffect(() => setMobileOpen(false), [pathname]);
   const unread = useUnreadCount(!!me.activeOrganizationId && !!me.role);
 
   const sidebar = (
