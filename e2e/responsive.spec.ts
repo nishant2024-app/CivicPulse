@@ -38,7 +38,7 @@ test("mobile: menu navigation works and no page overflows sideways", async ({ pa
     await expect(page).toHaveURL(new RegExp(`${path}$`), { timeout: 20_000 });
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     // Measure after the page's data has rendered, not while skeletons are showing.
-    await page.waitForLoadState("networkidle");
+    await expect(page.locator(".animate-pulse")).toHaveCount(0);
     expect(await overflow(), `${destination} overflows`).toBeLessThanOrEqual(0);
   }
 });
