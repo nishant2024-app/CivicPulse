@@ -149,9 +149,11 @@ export async function expectDatabaseRejection(
   } catch (error) {
     caught = error;
   }
-  if (caught === undefined) throw new Error(`expected rejection matching ${pattern}, but it succeeded`);
+  if (caught === undefined)
+    throw new Error(`expected rejection matching ${pattern}, but it succeeded`);
   const messages: string[] = [];
-  for (let current = caught, depth = 0; current instanceof Error && depth < 5; depth++) {
+  let current: unknown = caught;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
     messages.push(current.message);
     current = current.cause;
   }

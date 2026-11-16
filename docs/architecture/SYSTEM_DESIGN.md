@@ -72,7 +72,7 @@ Each has `routes.ts` (HTTP + schemas) and `service.ts` (business rules + DB acce
 
 - Users are global; membership in an organization carries the role
   (`organization_members.role`). `SUPER_ADMIN` is a platform-level flag on the user.
-- A session holds an *active organization*. All tenant-scoped requests are evaluated
+- A session holds an _active organization_. All tenant-scoped requests are evaluated
   against that organization only.
 - Every tenant table has `organization_id NOT NULL` and an RLS policy
   `organization_id = current_setting('app.organization_id')::uuid`.
@@ -121,32 +121,32 @@ the complaint, insert `complaint_status_history`, insert `outbox_events`, insert
 
 ## 6. Adapters and fallbacks
 
-| Port            | Primary driver            | Fallback driver         | Selected by             |
-| --------------- | ------------------------- | ----------------------- | ----------------------- |
-| Event broker    | `kafka` (kafkajs)         | `memory` (in-process)   | `EVENT_BROKER`          |
-| Job queue       | `bullmq`                  | `inline` (in-process, retried) | `REDIS_URL` present? |
-| Cache / limiter | Redis                     | In-memory LRU / counter | `REDIS_URL` present?    |
-| Search          | `opensearch`              | `postgres` (tsvector)   | `SEARCH_DRIVER`         |
-| Object storage  | `s3` (R2, any S3 API)     | `local` (disk)          | `STORAGE_DRIVER`        |
-| Email           | `smtp` / `resend` HTTP    | `log` (structured log)  | `EMAIL_DRIVER`          |
-| Telemetry       | OTLP exporter             | disabled                | `OTEL_EXPORTER_OTLP_ENDPOINT` |
+| Port            | Primary driver         | Fallback driver                | Selected by                   |
+| --------------- | ---------------------- | ------------------------------ | ----------------------------- |
+| Event broker    | `kafka` (kafkajs)      | `memory` (in-process)          | `EVENT_BROKER`                |
+| Job queue       | `bullmq`               | `inline` (in-process, retried) | `REDIS_URL` present?          |
+| Cache / limiter | Redis                  | In-memory LRU / counter        | `REDIS_URL` present?          |
+| Search          | `opensearch`           | `postgres` (tsvector)          | `SEARCH_DRIVER`               |
+| Object storage  | `s3` (R2, any S3 API)  | `local` (disk)                 | `STORAGE_DRIVER`              |
+| Email           | `smtp` / `resend` HTTP | `log` (structured log)         | `EMAIL_DRIVER`                |
+| Telemetry       | OTLP exporter          | disabled                       | `OTEL_EXPORTER_OTLP_ENDPOINT` |
 
 Fallbacks are real implementations of the same interface, covered by the same contract
 tests. They are not mocks.
 
 ## 7. Failure behaviour
 
-| Failure                         | Behaviour                                                                                      |
-| ------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Redis down                      | Cache bypassed, rate limiter uses memory, API keeps serving. Jobs wait in outbox/consumer retry. |
-| Kafka down                      | Outbox rows accumulate unpublished; relay retries with backoff; nothing is lost.               |
-| Consumer down                   | Kafka retains events (or outbox retains them for the memory broker); processing resumes.       |
-| Duplicate event                 | `processed_events (consumer_group, event_id)` unique key makes handling idempotent.            |
-| Poison event                    | After N attempts the event is written to `dead_letter_events` and the consumer moves on.       |
-| Email provider down             | BullMQ retries with exponential backoff; final failure recorded on the notification row.       |
-| Search indexing fails           | Consumer retries, then dead-letters; a reindex script rebuilds the index from Postgres.        |
-| Image upload/processing fails   | Upload is rejected with a clear error; the complaint itself is already saved.                  |
-| Database down                   | Readiness probe fails, API returns 503; no partial writes because every write is transactional. |
+| Failure                       | Behaviour                                                                                        |
+| ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| Redis down                    | Cache bypassed, rate limiter uses memory, API keeps serving. Jobs wait in outbox/consumer retry. |
+| Kafka down                    | Outbox rows accumulate unpublished; relay retries with backoff; nothing is lost.                 |
+| Consumer down                 | Kafka retains events (or outbox retains them for the memory broker); processing resumes.         |
+| Duplicate event               | `processed_events (consumer_group, event_id)` unique key makes handling idempotent.              |
+| Poison event                  | After N attempts the event is written to `dead_letter_events` and the consumer moves on.         |
+| Email provider down           | BullMQ retries with exponential backoff; final failure recorded on the notification row.         |
+| Search indexing fails         | Consumer retries, then dead-letters; a reindex script rebuilds the index from Postgres.          |
+| Image upload/processing fails | Upload is rejected with a clear error; the complaint itself is already saved.                    |
+| Database down                 | Readiness probe fails, API returns 503; no partial writes because every write is transactional.  |
 
 ## 8. Scaling notes
 

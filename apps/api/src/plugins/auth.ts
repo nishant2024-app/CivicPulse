@@ -1,12 +1,7 @@
 import fp from "fastify-plugin";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { TenantContext } from "@civicpulse/db";
-import {
-  CSRF_HEADER,
-  CSRF_HEADER_VALUE,
-  hasPermission,
-  type Permission,
-} from "@civicpulse/shared";
+import { CSRF_HEADER, CSRF_HEADER_VALUE, hasPermission, type Permission } from "@civicpulse/shared";
 import { AppError, errors } from "../errors";
 import { resolveSession, SESSION_COOKIE, type AuthContext } from "../modules/auth/sessions";
 

@@ -100,7 +100,10 @@ export const workerProfiles = pgTable(
       .notNull()
       .references(() => organizationMembers.id, { onDelete: "cascade" }),
     employeeCode: text("employee_code"),
-    skills: text("skills").array().notNull().default(sql`'{}'::text[]`),
+    skills: text("skills")
+      .array()
+      .notNull()
+      .default(sql`'{}'::text[]`),
     isAvailable: boolean("is_available").notNull().default(true),
     maxActiveAssignments: integer("max_active_assignments").notNull().default(10),
     createdAt: createdAt(),

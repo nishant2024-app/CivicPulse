@@ -55,7 +55,10 @@ export const notificationPreferences = pgTable("notification_preferences", {
     .references(() => users.id, { onDelete: "cascade" }),
   inAppEnabled: boolean("in_app_enabled").notNull().default(true),
   emailEnabled: boolean("email_enabled").notNull().default(true),
-  mutedEventTypes: text("muted_event_types").array().notNull().default(sql`'{}'::text[]`),
+  mutedEventTypes: text("muted_event_types")
+    .array()
+    .notNull()
+    .default(sql`'{}'::text[]`),
   createdAt: createdAt(),
   updatedAt: updatedAt(),
 });

@@ -39,8 +39,16 @@ const envSchema = z.object({
 
   /** Used to derive HMAC keys (signed URLs). Must be overridden in production. */
   SESSION_SECRET: z.string().min(32).default(DEV_SESSION_SECRET),
-  SESSION_TTL_HOURS: z.coerce.number().int().min(1).default(24 * 7),
-  SESSION_ABSOLUTE_TTL_HOURS: z.coerce.number().int().min(1).default(24 * 30),
+  SESSION_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(24 * 7),
+  SESSION_ABSOLUTE_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(24 * 30),
 
   RATE_LIMIT_ENABLED: booleanFromEnv(true),
   API_DOCS_ENABLED: booleanFromEnv(true),

@@ -86,7 +86,8 @@ try {
           .returning({ id: users.id });
       }
       if (person.role === "SUPER_ADMIN") continue;
-      const staffInDepartment = person.role === "DEPARTMENT_MANAGER" || person.role === "FIELD_WORKER";
+      const staffInDepartment =
+        person.role === "DEPARTMENT_MANAGER" || person.role === "FIELD_WORKER";
       await tx
         .insert(organizationMembers)
         .values({
@@ -106,7 +107,9 @@ try {
   });
   console.log("Seeded organization 'demo-campus' with accounts:");
   for (const person of people) console.log(`  ${person.role.padEnd(20)} ${person.email}`);
-  console.log(`Password for all accounts: ${process.env.SEED_PASSWORD ? "(SEED_PASSWORD)" : password}`);
+  console.log(
+    `Password for all accounts: ${process.env.SEED_PASSWORD ? "(SEED_PASSWORD)" : password}`,
+  );
 } finally {
   await db.close();
 }

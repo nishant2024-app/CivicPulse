@@ -2,21 +2,20 @@
 
 ## 1. Threat model
 
-| Asset | Threat | Primary control |
-| ----- | ------ | --------------- |
-| Accounts | Credential stuffing, brute force | Argon2id, per-IP and per-account rate limits, generic errors |
-| Sessions | Theft, fixation, CSRF | Opaque random token, hashed at rest, httpOnly cookie, rotation on login, custom-header CSRF check |
-| Tenant data | Cross-organization access (IDOR) | Active-organization scoping + PostgreSQL RLS; 404 for foreign IDs |
-| Complaints | Unauthorized status manipulation | Transition table keyed by role and relationship; row lock; immutable history |
-| Reporter privacy | Leakage through public tracking | Dedicated response schema with an allow-list of fields; unguessable IDs; rate limit |
-| Uploads | Malware, oversized files, content sniffing | Magic-byte detection, size cap, re-encode with sharp, random keys, signed URLs |
-| Secrets | Leakage via repo or logs | Env-only secrets, validated at boot, log redaction, secret scanning in CI |
+| Asset            | Threat                                     | Primary control                                                                                   |
+| ---------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------- |
+| Accounts         | Credential stuffing, brute force           | Argon2id, per-IP and per-account rate limits, generic errors                                      |
+| Sessions         | Theft, fixation, CSRF                      | Opaque random token, hashed at rest, httpOnly cookie, rotation on login, custom-header CSRF check |
+| Tenant data      | Cross-organization access (IDOR)           | Active-organization scoping + PostgreSQL RLS; 404 for foreign IDs                                 |
+| Complaints       | Unauthorized status manipulation           | Transition table keyed by role and relationship; row lock; immutable history                      |
+| Reporter privacy | Leakage through public tracking            | Dedicated response schema with an allow-list of fields; unguessable IDs; rate limit               |
+| Uploads          | Malware, oversized files, content sniffing | Magic-byte detection, size cap, re-encode with sharp, random keys, signed URLs                    |
+| Secrets          | Leakage via repo or logs                   | Env-only secrets, validated at boot, log redaction, secret scanning in CI                         |
 
 ## 2. Authentication
 
 - **Passwords:** Argon2id (`@node-rs/argon2`; 19 MiB memory, 2 iterations, parallelism 1
-  — the OWASP baseline, chosen to fit small containers). Minimum 10 characters, maximum
-  128. Hashes are rehashed on login when parameters change.
+  — the OWASP baseline, chosen to fit small containers). Minimum 10 characters, maximum 128. Hashes are rehashed on login when parameters change.
 - **Sessions:** 32 random bytes, base64url. The database stores only the SHA-256 digest,
   so a database leak does not yield usable sessions. 7-day sliding expiry, 30-day
   absolute. Login always creates a new session (no fixation). Password change or reset
@@ -120,6 +119,8 @@ keeping the organization's complaint record intact. A daily job enforces retenti
 ## 12. Known limitations (v1)
 
 - No multi-factor authentication.
+- Registration reports when an email is already registered (`409`). Login and password
+  reset do not reveal this; closing the registration path needs email verification first.
 - Email verification is not enforced before first login.
 - `SET LOCAL ROLE`-based RLS guards against application bugs, not against an attacker
   who can run arbitrary SQL on the connection.

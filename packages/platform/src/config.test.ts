@@ -37,7 +37,10 @@ describe("loadConfig", () => {
   });
 
   it("merges and normalizes allowed origins", () => {
-    const config = loadConfig({ ...base, ALLOWED_ORIGINS: "https://a.example/, https://b.example" });
+    const config = loadConfig({
+      ...base,
+      ALLOWED_ORIGINS: "https://a.example/, https://b.example",
+    });
     expect(config.allowedOrigins).toEqual([
       "http://localhost:3000",
       "https://a.example",

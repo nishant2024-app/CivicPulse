@@ -50,12 +50,7 @@ export type UserStatus = (typeof USER_STATUSES)[number];
 export const MEMBER_STATUSES = ["ACTIVE", "SUSPENDED", "REMOVED"] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
-export const ASSIGNMENT_STATUSES = [
-  "PENDING",
-  "ACCEPTED",
-  "COMPLETED",
-  "SUPERSEDED",
-] as const;
+export const ASSIGNMENT_STATUSES = ["PENDING", "ACCEPTED", "COMPLETED", "SUPERSEDED"] as const;
 export type AssignmentStatus = (typeof ASSIGNMENT_STATUSES)[number];
 
 export const ATTACHMENT_KINDS = ["REPORT", "EVIDENCE", "RESOLUTION"] as const;

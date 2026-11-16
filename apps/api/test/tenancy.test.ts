@@ -94,7 +94,14 @@ describe("row-level security (database layer)", () => {
     }));
 
     expect(seen.organizations).toEqual([{ id: alpha.organizationId }]);
-    for (const rows of [seen.categories, seen.sla, seen.members, seen.complaints, seen.history, seen.audit]) {
+    for (const rows of [
+      seen.categories,
+      seen.sla,
+      seen.members,
+      seen.complaints,
+      seen.history,
+      seen.audit,
+    ]) {
       expect(rows.length).toBeGreaterThan(0);
       expect(rows.every((row) => row.org === alpha.organizationId)).toBe(true);
     }
@@ -134,7 +141,8 @@ describe("row-level security (database layer)", () => {
       ctx.db.withTenant(tenantOf(alpha), (tx) =>
         tx.insert(departments).values({ organizationId: beta.organizationId, name: "Planted" }),
       ),
-     /row-level security/i);
+      /row-level security/i,
+    );
   });
 
   it("refuses to move a row into another tenant", async () => {
@@ -146,7 +154,8 @@ describe("row-level security (database layer)", () => {
           .set({ organizationId: beta.organizationId })
           .where(eq(complaints.id, own.id)),
       ),
-     /row-level security/i);
+      /row-level security/i,
+    );
   });
 
   it("fails closed when no tenant is set: nothing visible, nothing insertable", async () => {
@@ -165,7 +174,8 @@ describe("row-level security (database layer)", () => {
         await tx.execute(sql`set local role civicpulse_app`);
         await tx.insert(departments).values({ organizationId: alpha.organizationId, name: "X" });
       }),
-     /row-level security/i);
+      /row-level security/i,
+    );
   });
 
   it("does not leak the tenant setting to the next transaction on a pooled connection", async () => {
@@ -214,22 +224,31 @@ describe("append-only tables", () => {
           .set({ note: "rewritten" })
           .where(eq(complaintStatusHistory.complaintId, complaint.id)),
       ),
-     /append-only/);
+      /append-only/,
+    );
     await expectDatabaseRejection(
       ctx.db.withSystem((tx) =>
-        tx.delete(complaintStatusHistory).where(eq(complaintStatusHistory.complaintId, complaint.id)),
+        tx
+          .delete(complaintStatusHistory)
+          .where(eq(complaintStatusHistory.complaintId, complaint.id)),
       ),
-     /append-only/);
+      /append-only/,
+    );
   });
 
   it("rejects UPDATE and DELETE on audit logs", async () => {
     await expectDatabaseRejection(
       ctx.db.withSystem((tx) => tx.update(auditLogs).set({ action: "tampered" })),
-     /append-only/);
-    await expectDatabaseRejection(ctx.db.withSystem((tx) => tx.delete(auditLogs)), /append-only/);
+      /append-only/,
+    );
+    await expectDatabaseRejection(
+      ctx.db.withSystem((tx) => tx.delete(auditLogs)),
+      /append-only/,
+    );
     await expectDatabaseRejection(
       ctx.db.withTenant(tenantOf(alpha), (tx) => tx.delete(auditLogs)),
-     /permission denied/i);
+      /permission denied/i,
+    );
   });
 
   it("allows a retention purge only after an explicit opt-in", async () => {

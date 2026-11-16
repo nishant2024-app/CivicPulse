@@ -2,23 +2,23 @@
 
 ## 1. Environments
 
-| Environment | Where | What runs |
-| ----------- | ----- | --------- |
-| Development | Laptop + free managed services | `pnpm dev` (web + API with embedded workers). Postgres on Neon or a local install. Everything else optional. |
-| CI | GitHub Actions runners | Typecheck, lint, unit + integration tests (Postgres and Redis service containers), builds, image builds, chart validation. |
-| Ephemeral demo | GitHub Actions `workflow_dispatch` | `kind` cluster: Helm install, Argo CD sync and rollback demonstration, Prometheus/Grafana/Jaeger, Redpanda. Destroyed when the job ends. |
-| Zero-cost hosted | Free tiers | Web and API on free application hosting; data on Neon/Upstash/Aiven. Documented in the zero-cost guide (Phase 5), with providers re-verified at that time. |
-| Reference production | Kubernetes or ECS | Configured, not deployed. No paid resources are created by this project. |
+| Environment          | Where                              | What runs                                                                                                                                                  |
+| -------------------- | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Development          | Laptop + free managed services     | `pnpm dev` (web + API with embedded workers). Postgres on Neon or a local install. Everything else optional.                                               |
+| CI                   | GitHub Actions runners             | Typecheck, lint, unit + integration tests (Postgres and Redis service containers), builds, image builds, chart validation.                                 |
+| Ephemeral demo       | GitHub Actions `workflow_dispatch` | `kind` cluster: Helm install, Argo CD sync and rollback demonstration, Prometheus/Grafana/Jaeger, Redpanda. Destroyed when the job ends.                   |
+| Zero-cost hosted     | Free tiers                         | Web and API on free application hosting; data on Neon/Upstash/Aiven. Documented in the zero-cost guide (Phase 5), with providers re-verified at that time. |
+| Reference production | Kubernetes or ECS                  | Configured, not deployed. No paid resources are created by this project.                                                                                   |
 
 ## 2. Containers
 
 Three images from one multi-stage Dockerfile pattern (`infrastructure/docker/`):
 
-| Image | Base | Notes |
-| ----- | ---- | ----- |
-| `civicpulse-api` | `node:22-alpine` | `pnpm deploy`-pruned production dependencies, non-root user, `HEALTHCHECK` on `/healthz` |
-| `civicpulse-workers` | `node:22-alpine` | Same pattern; health endpoint on a side port |
-| `civicpulse-web` | `node:22-alpine` | Next.js `output: "standalone"`, non-root |
+| Image                | Base             | Notes                                                                                    |
+| -------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `civicpulse-api`     | `node:22-alpine` | `pnpm deploy`-pruned production dependencies, non-root user, `HEALTHCHECK` on `/healthz` |
+| `civicpulse-workers` | `node:22-alpine` | Same pattern; health endpoint on a side port                                             |
+| `civicpulse-web`     | `node:22-alpine` | Next.js `output: "standalone"`, non-root                                                 |
 
 Images are built by GitHub Actions and pushed to GHCR, tagged with the commit SHA and
 `latest` on the default branch. Docker is not required on the laptop.
@@ -44,12 +44,12 @@ cluster credentials.
 One Helm chart (`infrastructure/helm/civicpulse`) is the source of truth; plain manifests
 in `infrastructure/kubernetes/` are rendered from it for readers who do not use Helm.
 
-| Workload | Kind | Probes | Scaling |
-| -------- | ---- | ------ | ------- |
-| api | Deployment + Service | liveness `/healthz`, readiness `/readyz` | HPA on CPU, 2–6 replicas |
-| web | Deployment + Service | `/` | HPA, 2–4 replicas |
-| workers | Deployment | side-port `/healthz` | 1–3 replicas (safe: `SKIP LOCKED` relay, Kafka groups) |
-| migrate | Job (Helm pre-upgrade hook) | — | Runs `db:migrate` before new pods start |
+| Workload | Kind                        | Probes                                   | Scaling                                                |
+| -------- | --------------------------- | ---------------------------------------- | ------------------------------------------------------ |
+| api      | Deployment + Service        | liveness `/healthz`, readiness `/readyz` | HPA on CPU, 2–6 replicas                               |
+| web      | Deployment + Service        | `/`                                      | HPA, 2–4 replicas                                      |
+| workers  | Deployment                  | side-port `/healthz`                     | 1–3 replicas (safe: `SKIP LOCKED` relay, Kafka groups) |
+| migrate  | Job (Helm pre-upgrade hook) | —                                        | Runs `db:migrate` before new pods start                |
 
 Also: ConfigMap for non-secret settings, `existingSecret` reference for secrets, Ingress
 with path routing (`/api` → api, `/` → web), resource requests/limits, PodDisruptionBudget,
@@ -71,14 +71,14 @@ Application, waits for `Healthy/Synced`, and prints the status.
 
 `infrastructure/terraform/` holds reusable modules and two root configurations:
 
-| Path | Purpose | Cost |
-| ---- | ------- | ---- |
-| `modules/neon-database` | Neon project, database, roles | Free tier |
-| `modules/upstash-redis` | Upstash database | Free tier |
-| `modules/r2-bucket` | Cloudflare R2 bucket + CORS | Free tier (may require payment method — optional module) |
-| `modules/ecs-service` | Fargate service, ALB target, log group | **Paid — reference only** |
-| `environments/free` | Wires the free-tier modules | Free |
-| `environments/aws-ecs` | ECS alternative architecture | **Paid — never applied by this project** |
+| Path                    | Purpose                                | Cost                                                     |
+| ----------------------- | -------------------------------------- | -------------------------------------------------------- |
+| `modules/neon-database` | Neon project, database, roles          | Free tier                                                |
+| `modules/upstash-redis` | Upstash database                       | Free tier                                                |
+| `modules/r2-bucket`     | Cloudflare R2 bucket + CORS            | Free tier (may require payment method — optional module) |
+| `modules/ecs-service`   | Fargate service, ALB target, log group | **Paid — reference only**                                |
+| `environments/free`     | Wires the free-tier modules            | Free                                                     |
+| `environments/aws-ecs`  | ECS alternative architecture           | **Paid — never applied by this project**                 |
 
 State: local by default for the free environment (git-ignored); documented options for
 remote state. Provider tokens come from environment variables. CI runs `terraform fmt
@@ -87,12 +87,12 @@ explicit user action; the ECS root additionally requires `-var confirm_paid_reso
 
 ## 7. Observability stack
 
-| Signal | In the app | Local/ephemeral backend | Free hosted backend |
-| ------ | ---------- | ----------------------- | ------------------- |
-| Metrics | `prom-client` at `/metrics` (HTTP, DB, queue, consumer, outbox) | Prometheus in demo cluster | Grafana Cloud (remote write or Alloy) |
-| Traces | OpenTelemetry SDK, OTLP/HTTP exporter | Jaeger all-in-one | Grafana Cloud Tempo |
-| Logs | pino JSON to stdout with `trace_id` | `kubectl logs` | Grafana Cloud Loki |
-| Dashboards | JSON in `monitoring/grafana/dashboards/` | Provisioned Grafana | Import into Grafana Cloud |
+| Signal     | In the app                                                      | Local/ephemeral backend    | Free hosted backend                   |
+| ---------- | --------------------------------------------------------------- | -------------------------- | ------------------------------------- |
+| Metrics    | `prom-client` at `/metrics` (HTTP, DB, queue, consumer, outbox) | Prometheus in demo cluster | Grafana Cloud (remote write or Alloy) |
+| Traces     | OpenTelemetry SDK, OTLP/HTTP exporter                           | Jaeger all-in-one          | Grafana Cloud Tempo                   |
+| Logs       | pino JSON to stdout with `trace_id`                             | `kubectl logs`             | Grafana Cloud Loki                    |
+| Dashboards | JSON in `monitoring/grafana/dashboards/`                        | Provisioned Grafana        | Import into Grafana Cloud             |
 
 The OpenTelemetry Collector config in `monitoring/otel/` receives OTLP and fans out to
 Jaeger and Prometheus, so the application only ever knows one endpoint.

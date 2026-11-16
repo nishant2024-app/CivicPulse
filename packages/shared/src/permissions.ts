@@ -71,7 +71,11 @@ export const ROLE_PERMISSIONS: Readonly<Record<Role, ReadonlySet<Permission>>> =
   FIELD_WORKER: new Set(FIELD_WORKER),
   DEPARTMENT_MANAGER: new Set(DEPARTMENT_MANAGER),
   ORGANIZATION_ADMIN: new Set(ORGANIZATION_ADMIN),
-  SUPER_ADMIN: new Set<Permission>([...ORGANIZATION_ADMIN, "organization:create", "platform:admin"]),
+  SUPER_ADMIN: new Set<Permission>([
+    ...ORGANIZATION_ADMIN,
+    "organization:create",
+    "platform:admin",
+  ]),
 };
 
 export function hasPermission(role: Role | null | undefined, permission: Permission): boolean {

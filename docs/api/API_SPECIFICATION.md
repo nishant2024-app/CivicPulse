@@ -21,23 +21,28 @@ organization. `POST /auth/switch-organization` changes it. There is no
 **Errors.**
 
 ```json
-{ "error": { "code": "VALIDATION_ERROR", "message": "Invalid request",
-             "details": [{ "path": "email", "message": "Invalid email" }],
-             "requestId": "req_01J..." } }
+{
+  "error": {
+    "code": "VALIDATION_ERROR",
+    "message": "Invalid request",
+    "details": [{ "path": "email", "message": "Invalid email" }],
+    "requestId": "req_01J..."
+  }
+}
 ```
 
-| HTTP | `code` |
-| ---- | ------ |
-| 400 | `VALIDATION_ERROR`, `BAD_REQUEST` |
-| 401 | `UNAUTHENTICATED` |
-| 403 | `FORBIDDEN`, `CSRF_REJECTED` |
-| 404 | `NOT_FOUND` (also returned for resources in another organization) |
-| 409 | `CONFLICT`, `INVALID_STATUS_TRANSITION` |
-| 413 | `PAYLOAD_TOO_LARGE` |
-| 415 | `UNSUPPORTED_MEDIA_TYPE` |
-| 429 | `RATE_LIMITED` |
-| 500 | `INTERNAL_ERROR` (no internals leaked) |
-| 503 | `SERVICE_UNAVAILABLE` |
+| HTTP | `code`                                                            |
+| ---- | ----------------------------------------------------------------- |
+| 400  | `VALIDATION_ERROR`, `BAD_REQUEST`                                 |
+| 401  | `UNAUTHENTICATED`                                                 |
+| 403  | `FORBIDDEN`, `CSRF_REJECTED`                                      |
+| 404  | `NOT_FOUND` (also returned for resources in another organization) |
+| 409  | `CONFLICT`, `INVALID_STATUS_TRANSITION`                           |
+| 413  | `PAYLOAD_TOO_LARGE`                                               |
+| 415  | `UNSUPPORTED_MEDIA_TYPE`                                          |
+| 429  | `RATE_LIMITED`                                                    |
+| 500  | `INTERNAL_ERROR` (no internals leaked)                            |
+| 503  | `SERVICE_UNAVAILABLE`                                             |
 
 **Pagination.** `?page=1&pageSize=20` (max 100). Response:
 `{ "data": [...], "pagination": { "page", "pageSize", "total", "totalPages" } }`.
@@ -57,106 +62,106 @@ public tracking 30/min per IP; uploads 20/min per user.
 
 ### Auth
 
-| Method | Path | Access | Notes |
-| ------ | ---- | ------ | ----- |
-| POST | `/auth/register` | — | Citizen registration into an organization that allows it, or with an invitation token |
-| POST | `/auth/login` | — | Generic error on failure; rotates session |
-| POST | `/auth/logout` | any | Revokes the current session |
-| GET | `/auth/me` | any | User, memberships, active organization, permissions |
-| POST | `/auth/switch-organization` | any | Must be a member |
-| POST | `/auth/password/forgot` | — | Always 202; never reveals whether the email exists |
-| POST | `/auth/password/reset` | — | Single-use token; revokes all sessions |
-| POST | `/auth/password/change` | any | Requires current password |
-| GET | `/auth/sessions` | any | List own sessions |
-| DELETE | `/auth/sessions/:id` | any | Revoke one of own sessions |
+| Method | Path                        | Access | Notes                                                                                 |
+| ------ | --------------------------- | ------ | ------------------------------------------------------------------------------------- |
+| POST   | `/auth/register`            | —      | Citizen registration into an organization that allows it, or with an invitation token |
+| POST   | `/auth/login`               | —      | Generic error on failure; rotates session                                             |
+| POST   | `/auth/logout`              | any    | Revokes the current session                                                           |
+| GET    | `/auth/me`                  | any    | User, memberships, active organization, permissions                                   |
+| POST   | `/auth/switch-organization` | any    | Must be a member                                                                      |
+| POST   | `/auth/password/forgot`     | —      | Always 202; never reveals whether the email exists                                    |
+| POST   | `/auth/password/reset`      | —      | Single-use token; revokes all sessions                                                |
+| POST   | `/auth/password/change`     | any    | Requires current password                                                             |
+| GET    | `/auth/sessions`            | any    | List own sessions                                                                     |
+| DELETE | `/auth/sessions/:id`        | any    | Revoke one of own sessions                                                            |
 
 ### Users / profile
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| PATCH | `/users/me` | any |
-| DELETE | `/users/me` | any (password confirmation; anonymizes) |
-| GET/PUT | `/users/me/notification-preferences` | any |
+| Method  | Path                                 | Access                                  |
+| ------- | ------------------------------------ | --------------------------------------- |
+| PATCH   | `/users/me`                          | any                                     |
+| DELETE  | `/users/me`                          | any (password confirmation; anonymizes) |
+| GET/PUT | `/users/me/notification-preferences` | any                                     |
 
 ### Organizations
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| GET | `/organizations/public` | — (id, name, slug, type of organizations open for registration) |
-| POST | `/organizations` | SA, or any authenticated user when self-service creation is enabled (creator becomes OA) |
-| GET | `/organizations` | SA: all · others: own memberships |
-| GET | `/organizations/:id` | members, SA |
-| PATCH | `/organizations/:id` | OA, SA |
-| GET | `/organizations/current/members` | OA, DM (own department) |
-| PATCH | `/organizations/current/members/:memberId` | OA (role, department, status) |
-| DELETE | `/organizations/current/members/:memberId` | OA |
-| GET/POST | `/organizations/current/invitations` | OA |
-| DELETE | `/organizations/current/invitations/:id` | OA |
-| GET | `/invitations/:token` | — (organization name and role only) |
-| GET/POST | `/organizations/current/categories` | read: members · write: OA |
-| GET/PUT | `/organizations/current/sla-policies` | OA |
+| Method   | Path                                       | Access                                                                                   |
+| -------- | ------------------------------------------ | ---------------------------------------------------------------------------------------- |
+| GET      | `/organizations/public`                    | — (id, name, slug, type of organizations open for registration)                          |
+| POST     | `/organizations`                           | SA, or any authenticated user when self-service creation is enabled (creator becomes OA) |
+| GET      | `/organizations`                           | SA: all · others: own memberships                                                        |
+| GET      | `/organizations/:id`                       | members, SA                                                                              |
+| PATCH    | `/organizations/:id`                       | OA, SA                                                                                   |
+| GET      | `/organizations/current/members`           | OA, DM (own department)                                                                  |
+| PATCH    | `/organizations/current/members/:memberId` | OA (role, department, status)                                                            |
+| DELETE   | `/organizations/current/members/:memberId` | OA                                                                                       |
+| GET/POST | `/organizations/current/invitations`       | OA                                                                                       |
+| DELETE   | `/organizations/current/invitations/:id`   | OA                                                                                       |
+| GET      | `/invitations/:token`                      | — (organization name and role only)                                                      |
+| GET/POST | `/organizations/current/categories`        | read: members · write: OA                                                                |
+| GET/PUT  | `/organizations/current/sla-policies`      | OA                                                                                       |
 
 ### Departments
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| GET | `/departments` | members |
-| POST | `/departments` | OA |
-| GET | `/departments/:id` | OA, DM, FW |
-| PATCH | `/departments/:id` | OA |
-| DELETE | `/departments/:id` | OA (soft delete; refused while open complaints are assigned) |
-| GET | `/departments/:id/workers` | OA, DM of that department |
+| Method | Path                       | Access                                                       |
+| ------ | -------------------------- | ------------------------------------------------------------ |
+| GET    | `/departments`             | members                                                      |
+| POST   | `/departments`             | OA                                                           |
+| GET    | `/departments/:id`         | OA, DM, FW                                                   |
+| PATCH  | `/departments/:id`         | OA                                                           |
+| DELETE | `/departments/:id`         | OA (soft delete; refused while open complaints are assigned) |
+| GET    | `/departments/:id/workers` | OA, DM of that department                                    |
 
 ### Complaints
 
-| Method | Path | Access | Notes |
-| ------ | ---- | ------ | ----- |
-| POST | `/complaints` | CZ and staff | Returns `trackingId` |
-| GET | `/complaints` | any | Scope is forced by role: CZ own · FW assigned · DM department · OA all |
-| GET | `/complaints/:id` | per scope | 404 outside scope |
-| PATCH | `/complaints/:id` | reporter while `REPORTED`; OA/DM (priority, category) | |
-| POST | `/complaints/:id/status` | per transition table | Body `{ status, note }` |
-| POST | `/complaints/:id/assign` | OA, DM | `{ departmentId, workerId?, note? }` |
-| POST | `/complaints/:id/assignment/accept` | assigned FW | |
-| GET/POST | `/complaints/:id/comments` | per scope | `isInternal` only for staff; citizens never see internal notes |
-| GET/POST | `/complaints/:id/attachments` | per scope | multipart, images only |
-| GET | `/complaints/:id/attachments/:attachmentId/url` | per scope | Short-lived signed URL |
-| POST | `/complaints/:id/reopen` | reporter, OA | Within the reopen window |
-| POST | `/complaints/:id/feedback` | reporter | Once, after `RESOLVED`/`CLOSED` |
-| GET | `/complaints/:id/history` | per scope | |
+| Method   | Path                                            | Access                                                | Notes                                                                  |
+| -------- | ----------------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------- |
+| POST     | `/complaints`                                   | CZ and staff                                          | Returns `trackingId`                                                   |
+| GET      | `/complaints`                                   | any                                                   | Scope is forced by role: CZ own · FW assigned · DM department · OA all |
+| GET      | `/complaints/:id`                               | per scope                                             | 404 outside scope                                                      |
+| PATCH    | `/complaints/:id`                               | reporter while `REPORTED`; OA/DM (priority, category) |                                                                        |
+| POST     | `/complaints/:id/status`                        | per transition table                                  | Body `{ status, note }`                                                |
+| POST     | `/complaints/:id/assign`                        | OA, DM                                                | `{ departmentId, workerId?, note? }`                                   |
+| POST     | `/complaints/:id/assignment/accept`             | assigned FW                                           |                                                                        |
+| GET/POST | `/complaints/:id/comments`                      | per scope                                             | `isInternal` only for staff; citizens never see internal notes         |
+| GET/POST | `/complaints/:id/attachments`                   | per scope                                             | multipart, images only                                                 |
+| GET      | `/complaints/:id/attachments/:attachmentId/url` | per scope                                             | Short-lived signed URL                                                 |
+| POST     | `/complaints/:id/reopen`                        | reporter, OA                                          | Within the reopen window                                               |
+| POST     | `/complaints/:id/feedback`                      | reporter                                              | Once, after `RESOLVED`/`CLOSED`                                        |
+| GET      | `/complaints/:id/history`                       | per scope                                             |                                                                        |
 
 ### Tracking (public)
 
-| Method | Path | Notes |
-| ------ | ---- | ----- |
-| GET | `/tracking/:trackingId` | Returns status, category, organization and department **names**, coarse location text, public timeline, resolution photo URLs. Never returns reporter identity, internal notes, staff names, exact coordinates or internal IDs. |
+| Method | Path                    | Notes                                                                                                                                                                                                                           |
+| ------ | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/tracking/:trackingId` | Returns status, category, organization and department **names**, coarse location text, public timeline, resolution photo URLs. Never returns reporter identity, internal notes, staff names, exact coordinates or internal IDs. |
 
 ### Notifications
 
-| Method | Path |
-| ------ | ---- |
-| GET | `/notifications` (`?unread=true`) |
-| GET | `/notifications/unread-count` |
-| POST | `/notifications/:id/read` |
-| POST | `/notifications/read-all` |
+| Method | Path                              |
+| ------ | --------------------------------- |
+| GET    | `/notifications` (`?unread=true`) |
+| GET    | `/notifications/unread-count`     |
+| POST   | `/notifications/:id/read`         |
+| POST   | `/notifications/read-all`         |
 
 ### Search, analytics, audit
 
-| Method | Path | Access |
-| ------ | ---- | ------ |
-| GET | `/search/complaints` | OA, DM, FW (scoped) — `q`, `status`, `categoryId`, `departmentId`, `priority`, `near=lat,lng`, `radiusKm`, paging, highlights |
-| GET | `/analytics/overview` | OA, DM (own department) |
-| GET | `/analytics/departments` | OA |
-| GET | `/analytics/categories` | OA, DM |
-| GET | `/analytics/trends` | OA, DM — `?months=12` |
-| GET | `/analytics/hotspots` | OA, DM — grid-aggregated coordinates |
-| GET | `/audit-logs` | OA (own organization), SA |
+| Method | Path                     | Access                                                                                                                        |
+| ------ | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
+| GET    | `/search/complaints`     | OA, DM, FW (scoped) — `q`, `status`, `categoryId`, `departmentId`, `priority`, `near=lat,lng`, `radiusKm`, paging, highlights |
+| GET    | `/analytics/overview`    | OA, DM (own department)                                                                                                       |
+| GET    | `/analytics/departments` | OA                                                                                                                            |
+| GET    | `/analytics/categories`  | OA, DM                                                                                                                        |
+| GET    | `/analytics/trends`      | OA, DM — `?months=12`                                                                                                         |
+| GET    | `/analytics/hotspots`    | OA, DM — grid-aggregated coordinates                                                                                          |
+| GET    | `/audit-logs`            | OA (own organization), SA                                                                                                     |
 
 ### Operations (outside `/api/v1`)
 
-| Path | Purpose |
-| ---- | ------- |
-| `/healthz` | Liveness — process is up |
-| `/readyz` | Readiness — database reachable; reports optional dependencies without failing on them |
-| `/metrics` | Prometheus exposition (network-restricted in production) |
-| `/api/docs` | Swagger UI (disabled in production unless `API_DOCS_ENABLED=true`) |
+| Path        | Purpose                                                                               |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `/healthz`  | Liveness — process is up                                                              |
+| `/readyz`   | Readiness — database reachable; reports optional dependencies without failing on them |
+| `/metrics`  | Prometheus exposition (network-restricted in production)                              |
+| `/api/docs` | Swagger UI (disabled in production unless `API_DOCS_ENABLED=true`)                    |

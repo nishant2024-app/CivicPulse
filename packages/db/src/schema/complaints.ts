@@ -77,10 +77,7 @@ export const complaints = pgTable(
       .on(t.organizationId, t.slaDueAt)
       .where(sql`${t.status} in ${OPEN} and ${t.slaDueAt} is not null`),
     index("complaints_search_idx").using("gin", t.searchVector),
-    check(
-      "complaints_latitude_ck",
-      sql`${t.latitude} is null or ${t.latitude} between -90 and 90`,
-    ),
+    check("complaints_latitude_ck", sql`${t.latitude} is null or ${t.latitude} between -90 and 90`),
     check(
       "complaints_longitude_ck",
       sql`${t.longitude} is null or ${t.longitude} between -180 and 180`,
