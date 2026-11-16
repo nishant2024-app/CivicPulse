@@ -15,6 +15,13 @@
       "when": 1794818396676,
       "tag": "0001_tenant_isolation_and_immutability",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794821879720,
+      "tag": "0002_lock_down_internal_tables",
+      "breakpoints": true
     }
   ]
 }

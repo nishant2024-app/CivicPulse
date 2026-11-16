@@ -55,6 +55,17 @@ const envSchema = z.object({
   /** Allow any signed-in user to create an organization (they become its admin). */
   SELF_SERVICE_ORGANIZATIONS: booleanFromEnv(true),
 
+  /** "local" stores uploads on disk. An S3-compatible driver (R2) arrives with Phase 3. */
+  STORAGE_DRIVER: z.enum(["local"]).default("local"),
+  STORAGE_LOCAL_DIR: z.string().default(".data/uploads"),
+  UPLOAD_MAX_BYTES: z.coerce
+    .number()
+    .int()
+    .min(1024)
+    .default(8 * 1024 * 1024),
+  /** Process outbox events inside the API process. Turn off when a separate worker runs. */
+  EMBEDDED_WORKERS: booleanFromEnv(true),
+
   EMAIL_DRIVER: z.enum(["log"]).default("log"),
   EMAIL_FROM: z.string().default("CivicPulse <no-reply@civicpulse.local>"),
 });

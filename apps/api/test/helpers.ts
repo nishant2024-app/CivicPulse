@@ -1,7 +1,16 @@
 import type { FastifyInstance, InjectOptions, LightMyRequestResponse } from "fastify";
 import { sql } from "drizzle-orm";
 import { createDb, type Db } from "@civicpulse/db";
-import { loadConfig, type AppConfig, type EmailMessage, type Mailer } from "@civicpulse/platform";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import {
+  createLocalStorage,
+  loadConfig,
+  type AppConfig,
+  type EmailMessage,
+  type Mailer,
+} from "@civicpulse/platform";
 import { CSRF_HEADER, CSRF_HEADER_VALUE } from "@civicpulse/shared";
 import { buildApp } from "../src/app";
 
@@ -37,7 +46,12 @@ export async function createTestContext(
       outbox.push(message);
     },
   };
-  const app = await buildApp({ config, db, mailer });
+  const storage = createLocalStorage({
+    directory: mkdtempSync(path.join(tmpdir(), "civicpulse-test-")),
+    signingSecret: config.SESSION_SECRET,
+    urlPrefix: "/api/v1/files",
+  });
+  const app = await buildApp({ config, db, mailer, storage });
   await app.ready();
   return {
     app,

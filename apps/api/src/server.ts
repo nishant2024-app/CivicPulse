@@ -1,5 +1,11 @@
 import { createDb } from "@civicpulse/db";
-import { ConfigError, createLogger, createLogMailer, loadConfig } from "@civicpulse/platform";
+import {
+  ConfigError,
+  createLocalStorage,
+  createLogger,
+  createLogMailer,
+  loadConfig,
+} from "@civicpulse/platform";
 import { buildApp } from "./app";
 
 async function main(): Promise<void> {
@@ -21,7 +27,12 @@ async function main(): Promise<void> {
   const mailer = createLogMailer(createLogger(config.LOG_LEVEL, "mailer"), {
     logBodies: !config.isProduction,
   });
-  const app = await buildApp({ config, db, mailer });
+  const storage = createLocalStorage({
+    directory: config.STORAGE_LOCAL_DIR,
+    signingSecret: config.SESSION_SECRET,
+    urlPrefix: "/api/v1/files",
+  });
+  const app = await buildApp({ config, db, mailer, storage });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
