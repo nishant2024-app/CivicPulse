@@ -8,7 +8,13 @@ import {
   type Db,
   type Tx,
 } from "@civicpulse/db";
-import { generateToken, hashToken, type AppConfig, type Mailer } from "@civicpulse/platform";
+import {
+  generateToken,
+  hashToken,
+  type AppConfig,
+  type JobQueues,
+  type Mailer,
+} from "@civicpulse/platform";
 import {
   permissionsFor,
   type ChangePasswordInput,
@@ -41,6 +47,7 @@ export interface AuthDeps {
   db: Db;
   config: AppConfig;
   mailer: Mailer;
+  queues: JobQueues | null;
 }
 
 function ttlOf(config: AppConfig): SessionTtl {
@@ -294,12 +301,19 @@ export async function requestPasswordReset(deps: AuthDeps, email: string): Promi
   );
 
   const link = `${config.WEB_ORIGIN}/reset-password?token=${encodeURIComponent(token)}`;
-  await mailer.send({
+  const message = {
+    kind: "message" as const,
     to: user.email,
     template: "password-reset",
     subject: "Reset your CivicPulse password",
     text: `Hello ${user.fullName},\n\nUse this link to choose a new password. It expires in one hour and can be used once.\n\n${link}\n\nIf you did not ask for this, you can ignore this email.`,
-  });
+  };
+  // Queued when a worker exists (retries on provider errors); otherwise sent now. Either
+  // way a mail failure must not change the response: it is identical for every email.
+  const queued = deps.queues ? await deps.queues.enqueueMail(message) : false;
+  if (!queued) {
+    await mailer.send(message).catch(() => undefined);
+  }
 }
 
 export async function resetPassword(

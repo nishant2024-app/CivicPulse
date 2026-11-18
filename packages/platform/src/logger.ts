@@ -1,3 +1,4 @@
+import { trace } from "@opentelemetry/api";
 import pino, { type Logger, type LoggerOptions } from "pino";
 
 export type { Logger };
@@ -26,6 +27,11 @@ export function loggerOptions(level: string, service: string): LoggerOptions {
     base: { service },
     redact: { paths: REDACT_PATHS, censor: "[redacted]" },
     timestamp: pino.stdTimeFunctions.isoTime,
+    // Ties every log line to its trace, so logs and traces can be joined.
+    mixin() {
+      const span = trace.getActiveSpan()?.spanContext();
+      return span ? { trace_id: span.traceId, span_id: span.spanId } : {};
+    },
     formatters: { level: (label) => ({ level: label }) },
   };
 }

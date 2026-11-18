@@ -1,0 +1,175 @@
+name: Cluster demo
+
+# Builds the images, creates a throwaway Kubernetes cluster (kind) with Terraform, lets Argo CD
+# install the whole platform from Git, then proves each component works and survives failures.
+# Everything runs on a free GitHub-hosted runner; nothing is deployed anywhere permanent.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      [
+        "infrastructure/**",
+        "apps/**",
+        "packages/**",
+        "scripts/**",
+        ".github/workflows/cluster-demo.yml",
+      ]
+
+concurrency:
+  group: cluster-demo-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  cluster:
+    name: Terraform → kind → Argo CD → verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    env:
+      TAG: ${{ github.sha }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Runner resources
+        run: |
+          nproc
+          free -m
+          df -h / | tail -1
+          docker version --format '{{.Server.Version}}'
+          kind version || true
+          kubectl version --client
+          helm version --short
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the three images
+        run: |
+          for target in api workers web; do
+            docker buildx build --load -f infrastructure/docker/Dockerfile --target "$target" \
+              -t "civicpulse-$target:$TAG" \
+              --cache-from "type=gha,scope=$target" --cache-to "type=gha,mode=max,scope=$target" .
+          done
+          docker images --format '{{.Repository}}:{{.Tag}} {{.Size}}' | grep civicpulse
+
+      - uses: hashicorp/setup-terraform@v3
+
+      - name: Terraform — create the Kubernetes cluster
+        working-directory: infrastructure/terraform/environments/kind-cluster
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false
+          echo "KUBECONFIG=$(terraform output -raw kubeconfig_path)" >> "$GITHUB_ENV"
+
+      - name: Load the images into the cluster
+        run: |
+          for target in api workers web; do
+            kind load docker-image "civicpulse-$target:$TAG" --name civicpulse
+          done
+          kubectl get nodes
+
+      - name: Terraform — secrets, ingress, Argo CD and the root application
+        working-directory: infrastructure/terraform/environments/gitops-demo
+        run: |
+          terraform init -input=false
+          terraform apply -auto-approve -input=false \
+            -var "kubeconfig_path=$KUBECONFIG" \
+            -var "repo_url=${{ github.server_url }}/${{ github.repository }}" \
+            -var "repo_revision=$TAG" \
+            -var "image_tag=$TAG" \
+            -var "image_prefix=civicpulse"
+
+      - name: Wait for Argo CD to sync and every workload to be healthy
+        run: |
+          for i in $(seq 1 120); do
+            status=$(kubectl -n argocd get applications -o jsonpath='{range .items[*]}{.metadata.name}={.status.sync.status}/{.status.health.status}{"\n"}{end}' 2>/dev/null || true)
+            echo "[$i] $(echo "$status" | tr '\n' ' ')"
+            if [ "$(echo "$status" | grep -c 'Synced/Healthy')" -ge 3 ]; then echo "all applications healthy"; exit 0; fi
+            sleep 10
+          done
+          echo "applications did not become healthy in time"
+          kubectl -n argocd get applications
+          kubectl get pods -A
+          exit 1
+
+      - name: Cluster state
+        if: always()
+        run: |
+          kubectl get pods -A -o wide || true
+          kubectl -n civicpulse top pods 2>/dev/null || true
+          free -m
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser tests against the cluster (through Traefik)
+        id: e2e
+        run: pnpm test:e2e
+        env:
+          E2E_NO_SERVER: "1"
+          E2E_BASE_URL: http://civicpulse.localtest.me:8080
+          CI: "true"
+
+      - name: Verify every component was used
+        id: verify
+        if: always()
+        run: |
+          set -o pipefail
+          { echo '### Component verification'; echo '```'; python3 scripts/verify-cluster.py; echo '```'; } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Zero-downtime release and rollback (Argo CD)
+        id: rollout
+        if: always()
+        run: |
+          set -o pipefail
+          { echo '### Rollout and rollback'; echo '```'; python3 scripts/rollout-demo.py --tag "$TAG" --prefix civicpulse; echo '```'; } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Failure drills
+        id: drills
+        if: always()
+        run: |
+          set -o pipefail
+          { echo '### Failure drills'; echo '```'; python3 scripts/drills.py kube --api http://civicpulse.localtest.me:8080; echo '```'; } 2>&1 | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect diagnostics
+        if: always()
+        run: |
+          mkdir -p diagnostics
+          kubectl get pods -A -o wide > diagnostics/pods.txt 2>&1 || true
+          kubectl -n argocd get applications -o yaml > diagnostics/argocd-applications.yaml 2>&1 || true
+          kubectl -n civicpulse get events --sort-by=.lastTimestamp > diagnostics/events.txt 2>&1 || true
+          for d in api workers web; do kubectl -n civicpulse logs deploy/$d --tail=300 > diagnostics/$d.log 2>&1 || true; done
+          for p in $(kubectl -n civicpulse get pods -o name 2>/dev/null); do
+            kubectl -n civicpulse describe "$p" 2>&1 | tail -40 > "diagnostics/describe-$(basename "$p").txt" || true
+          done
+          python3 scripts/jaeger-trace.py http://jaeger.localtest.me:8080 > diagnostics/jaeger-trace.txt 2>&1 || true
+          python3 scripts/check-dashboards.py http://prometheus.localtest.me:8080 > diagnostics/dashboards.txt 2>&1 || true
+          kubectl -n civicpulse get secret civicpulse-secrets -o name >/dev/null 2>&1 && echo "secret present (values not collected)" > diagnostics/secret.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cluster-demo-diagnostics
+          path: |
+            diagnostics/
+            playwright-report/
+            test-results/
+          retention-days: 7
+
+      - name: Result
+        if: always()
+        run: |
+          echo "e2e=${{ steps.e2e.outcome }} verify=${{ steps.verify.outcome }} rollout=${{ steps.rollout.outcome }} drills=${{ steps.drills.outcome }}"
+          test "${{ steps.e2e.outcome }}" = success && test "${{ steps.verify.outcome }}" = success && test "${{ steps.rollout.outcome }}" = success && test "${{ steps.drills.outcome }}" = success
+
+      - name: Delete the cluster
+        if: always()
+        run: kind delete cluster --name civicpulse || true

@@ -54,7 +54,7 @@ export const authPlugin = fp(async (app) => {
     path: "/",
     httpOnly: true,
     sameSite: "lax" as const,
-    secure: config.isProduction,
+    secure: config.isProduction && !config.ALLOW_INSECURE_HTTP,
   };
 
   app.decorate("setSessionCookie", (reply: FastifyReply, token: string, expiresAt: Date) => {

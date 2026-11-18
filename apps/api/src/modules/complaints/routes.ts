@@ -241,10 +241,12 @@ export const complaintRoutes: FastifyPluginAsyncZod = async (app) => {
           `Photos can be up to ${Math.floor(app.config.UPLOAD_MAX_BYTES / 1_048_576)} MB`,
         );
       }
-      const image = await processImage(buffer);
+      // With a queue, the worker makes the thumbnail so the upload returns sooner.
+      const image = await processImage(buffer, { thumbnail: !app.queues });
       const created = await service.addAttachment(
         app.db,
         app.storage,
+        app.queues,
         ctx,
         request.params.id,
         image,

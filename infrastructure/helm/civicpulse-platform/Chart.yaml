@@ -1,0 +1,6 @@
+apiVersion: v2
+name: civicpulse-platform
+description: Data services and observability for CivicPulse — PostgreSQL, Redis, Kafka, OpenSearch, an S3-compatible store, mail sink, OpenTelemetry Collector, Jaeger, Prometheus and Grafana. Everything is open source and needs no cloud account.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

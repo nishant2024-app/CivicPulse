@@ -1,0 +1,7 @@
+repoURL: https://github.com/nishant2024-app/CivicPulse
+# A branch, a tag or a commit SHA. CI pins the exact commit under test.
+targetRevision: main
+# Passed through to the child applications.
+imageTag: ""
+imagePrefix: ghcr.io/nishant2024-app/civicpulse
+appValueFile: values-kind.yaml

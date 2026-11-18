@@ -1,0 +1,74 @@
+{{- /* Wave 0 (data services, observability) must be healthy before wave 1 (the application). */}}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: civicpulse-platform
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: civicpulse
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: infrastructure/helm/civicpulse-platform
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.namespace }}
+  # Replica counts may be changed by autoscalers, operators or failure drills without Argo CD
+  # reverting them; everything else is still held to what Git says.
+  ignoreDifferences:
+    - { group: apps, kind: Deployment, jsonPointers: [/spec/replicas] }
+    - { group: apps, kind: StatefulSet, jsonPointers: [/spec/replicas] }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 5
+      backoff: { duration: 10s, factor: 2, maxDuration: 3m }
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: civicpulse
+  namespace: {{ .Release.Namespace }}
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: civicpulse
+  source:
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
+    path: infrastructure/helm/civicpulse
+    helm:
+      valueFiles:
+        - {{ .Values.appValueFile }}
+      {{- if or .Values.imageTag .Values.imagePrefix }}
+      parameters:
+        {{- if .Values.imageTag }}
+        - { name: image.tag, value: {{ .Values.imageTag | quote }} }
+        {{- end }}
+        {{- if .Values.imagePrefix }}
+        - { name: image.prefix, value: {{ .Values.imagePrefix | quote }} }
+        {{- end }}
+      {{- end }}
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: {{ .Values.namespace }}
+  # Replica counts may be changed by autoscalers, operators or failure drills without Argo CD
+  # reverting them; everything else is still held to what Git says.
+  ignoreDifferences:
+    - { group: apps, kind: Deployment, jsonPointers: [/spec/replicas] }
+    - { group: apps, kind: StatefulSet, jsonPointers: [/spec/replicas] }
+  syncPolicy:
+    automated: { prune: true, selfHeal: true }
+    syncOptions:
+      - RespectIgnoreDifferences=true
+    retry:
+      limit: 8
+      backoff: { duration: 15s, factor: 2, maxDuration: 5m }

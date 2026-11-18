@@ -1,0 +1,63 @@
+name: Infrastructure checks
+
+on:
+  push:
+    branches: [main, "claude/**"]
+    paths: ["infrastructure/**", "scripts/gen-dashboards.py", ".github/workflows/infra.yml"]
+  pull_request:
+    paths: ["infrastructure/**", "scripts/gen-dashboards.py", ".github/workflows/infra.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  helm:
+    name: Helm charts and Argo CD manifests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Install kubeconform
+        run: |
+          curl -sSL https://github.com/yannh/kubeconform/releases/download/v0.7.0/kubeconform-linux-amd64.tar.gz | tar xz kubeconform
+          sudo mv kubeconform /usr/local/bin/
+      - name: Lint every chart
+        run: |
+          for chart in infrastructure/helm/civicpulse-platform infrastructure/helm/civicpulse infrastructure/argocd/root infrastructure/argocd/apps; do
+            helm lint "$chart"
+          done
+          helm lint infrastructure/helm/civicpulse -f infrastructure/helm/civicpulse/values-kind.yaml
+          helm lint infrastructure/helm/civicpulse -f infrastructure/helm/civicpulse/values-prod.yaml
+      - name: Validate rendered manifests against Kubernetes schemas
+        run: |
+          CRDS='https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json'
+          K="kubeconform -strict -summary -kubernetes-version 1.32.0 -schema-location default -schema-location $CRDS"
+          helm template p infrastructure/helm/civicpulse-platform -n civicpulse | $K -
+          for values in "" "-f infrastructure/helm/civicpulse/values-kind.yaml" "-f infrastructure/helm/civicpulse/values-prod.yaml"; do
+            helm template a infrastructure/helm/civicpulse -n civicpulse $values | $K -
+          done
+          helm template r infrastructure/argocd/root -n argocd | $K -
+          helm template a infrastructure/argocd/apps -n argocd | $K -
+      - name: Dashboards are up to date with their generator
+        run: |
+          python3 scripts/gen-dashboards.py
+          git diff --exit-code -- infrastructure/helm/civicpulse-platform/files/grafana/dashboards
+
+  terraform:
+    name: Terraform
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+      - name: Formatting
+        run: terraform fmt -check -recursive infrastructure/terraform
+      - name: Validate every environment (never applied here)
+        run: |
+          for env in kind-cluster gitops-demo aws-ecs; do
+            echo "::group::$env"
+            terraform -chdir=infrastructure/terraform/environments/$env init -backend=false -input=false
+            terraform -chdir=infrastructure/terraform/environments/$env validate
+            echo "::endgroup::"
+          done

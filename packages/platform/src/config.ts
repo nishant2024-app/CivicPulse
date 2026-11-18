@@ -50,14 +50,27 @@ const envSchema = z.object({
     .min(1)
     .default(24 * 30),
 
+  /**
+   * Demonstration clusters are reached over plain HTTP. This explicit opt-in relaxes the
+   * production rule that WEB_ORIGIN be https and marks cookies non-Secure. Never for real use.
+   */
+  ALLOW_INSECURE_HTTP: booleanFromEnv(false),
   RATE_LIMIT_ENABLED: booleanFromEnv(true),
   API_DOCS_ENABLED: booleanFromEnv(true),
   /** Allow any signed-in user to create an organization (they become its admin). */
   SELF_SERVICE_ORGANIZATIONS: booleanFromEnv(true),
 
-  /** "local" stores uploads on disk. An S3-compatible driver (R2) arrives with Phase 3. */
-  STORAGE_DRIVER: z.enum(["local"]).default("local"),
+  /** "local" stores uploads on disk; "s3" uses any S3-compatible service (SeaweedFS, R2, AWS). */
+  STORAGE_DRIVER: z.enum(["local", "s3"]).default("local"),
   STORAGE_LOCAL_DIR: z.string().default(".data/uploads"),
+  S3_ENDPOINT: z.url().optional(),
+  /** Endpoint browsers can reach, for presigned URLs. Unset: files are served through the API. */
+  S3_PUBLIC_ENDPOINT: z.url().optional(),
+  S3_REGION: z.string().default("us-east-1"),
+  S3_BUCKET: z.string().optional(),
+  S3_ACCESS_KEY_ID: z.string().optional(),
+  S3_SECRET_ACCESS_KEY: z.string().optional(),
+  S3_FORCE_PATH_STYLE: booleanFromEnv(true),
   UPLOAD_MAX_BYTES: z.coerce
     .number()
     .int()
@@ -66,7 +79,32 @@ const envSchema = z.object({
   /** Process outbox events inside the API process. Turn off when a separate worker runs. */
   EMBEDDED_WORKERS: booleanFromEnv(true),
 
-  EMAIL_DRIVER: z.enum(["log"]).default("log"),
+  /** Cache, rate limiting and job queues. Unset: in-process fallbacks. */
+  REDIS_URL: z
+    .string()
+    .refine((v) => /^rediss?:\/\//.test(v), "REDIS_URL must be a redis:// URL")
+    .optional(),
+
+  /** "memory": events are handled in-process. "kafka": relayed to Kafka, consumed by workers. */
+  EVENT_BROKER: z.enum(["memory", "kafka"]).default("memory"),
+  KAFKA_BROKERS: csv,
+  KAFKA_CLIENT_ID: z.string().default("civicpulse"),
+  KAFKA_GROUP_PREFIX: z.string().default("civicpulse"),
+  KAFKA_TOPIC_PREFIX: z.string().default("civicpulse"),
+
+  /** "postgres": full-text search in the database. "opensearch": OpenSearch. */
+  SEARCH_DRIVER: z.enum(["postgres", "opensearch"]).default("postgres"),
+  OPENSEARCH_URL: z.url().optional(),
+  OPENSEARCH_INDEX: z.string().default("civicpulse-complaints"),
+
+  /** OTLP/HTTP endpoint of an OpenTelemetry collector or Jaeger. Unset: tracing is off. */
+  OTEL_EXPORTER_OTLP_ENDPOINT: z.url().optional(),
+  OTEL_SERVICE_NAME: z.string().optional(),
+  WORKER_PORT: z.coerce.number().int().min(1).max(65535).default(4100),
+
+  EMAIL_DRIVER: z.enum(["log", "smtp"]).default("log"),
+  /** e.g. smtp://mailpit:1025 or smtps://user:pass@smtp-relay.brevo.com:465 */
+  SMTP_URL: z.string().optional(),
   EMAIL_FROM: z.string().default("CivicPulse <no-reply@civicpulse.local>"),
 });
 
@@ -103,8 +141,22 @@ export function loadConfig(source: Record<string, string | undefined> = process.
   if (isProduction && env.SESSION_SECRET === DEV_SESSION_SECRET) {
     problems.push("SESSION_SECRET: the development default must not be used in production");
   }
-  if (isProduction && !env.WEB_ORIGIN.startsWith("https://")) {
+  if (isProduction && !env.ALLOW_INSECURE_HTTP && !env.WEB_ORIGIN.startsWith("https://")) {
     problems.push("WEB_ORIGIN: must be https in production");
+  }
+  if (env.EVENT_BROKER === "kafka" && env.KAFKA_BROKERS.length === 0) {
+    problems.push("KAFKA_BROKERS: required when EVENT_BROKER=kafka");
+  }
+  if (env.SEARCH_DRIVER === "opensearch" && !env.OPENSEARCH_URL) {
+    problems.push("OPENSEARCH_URL: required when SEARCH_DRIVER=opensearch");
+  }
+  if (env.STORAGE_DRIVER === "s3") {
+    for (const name of ["S3_BUCKET", "S3_ACCESS_KEY_ID", "S3_SECRET_ACCESS_KEY"] as const) {
+      if (!env[name]) problems.push(`${name}: required when STORAGE_DRIVER=s3`);
+    }
+  }
+  if (env.EMAIL_DRIVER === "smtp" && !env.SMTP_URL) {
+    problems.push("SMTP_URL: required when EMAIL_DRIVER=smtp");
   }
   if (problems.length > 0) throw new ConfigError(problems);
 

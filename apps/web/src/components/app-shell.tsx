@@ -13,6 +13,7 @@ import {
   Menu,
   Plus,
   ScrollText,
+  Search,
   Settings,
   SquarePen,
   Users,
@@ -55,6 +56,13 @@ const NAV: Array<{ heading: string | null; items: NavItem[] }> = [
         label: () => "Report an issue",
         icon: SquarePen,
         permission: "complaint:create",
+      },
+      {
+        href: "/search",
+        label: () => "Search",
+        icon: Search,
+        permission: "search:use",
+        needsOrganization: true,
       },
       {
         href: "/notifications",

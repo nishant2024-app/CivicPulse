@@ -1,0 +1,6 @@
+repoURL: https://github.com/nishant2024-app/CivicPulse
+targetRevision: main
+namespace: civicpulse
+imageTag: ""
+imagePrefix: ghcr.io/nishant2024-app/civicpulse
+appValueFile: values-kind.yaml

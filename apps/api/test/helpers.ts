@@ -6,13 +6,16 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import {
   createLocalStorage,
+  createMemoryCache,
+  createMetrics,
+  createPostgresSearchMarker,
   loadConfig,
   type AppConfig,
   type EmailMessage,
   type Mailer,
 } from "@civicpulse/platform";
 import { CSRF_HEADER, CSRF_HEADER_VALUE } from "@civicpulse/shared";
-import { buildApp } from "../src/app";
+import { buildApp, type AppDependencies } from "../src/app";
 
 export const TEST_DATABASE_URL =
   process.env.TEST_DATABASE_URL ??
@@ -29,6 +32,7 @@ export interface TestContext {
 
 export async function createTestContext(
   overrides: Record<string, string> = {},
+  deps: Partial<AppDependencies> = {},
 ): Promise<TestContext> {
   const config = loadConfig({
     NODE_ENV: "test",
@@ -51,7 +55,18 @@ export async function createTestContext(
     signingSecret: config.SESSION_SECRET,
     urlPrefix: "/api/v1/files",
   });
-  const app = await buildApp({ config, db, mailer, storage });
+  const app = await buildApp({
+    config,
+    db,
+    mailer,
+    storage,
+    cache: createMemoryCache(),
+    queues: null,
+    search: createPostgresSearchMarker(),
+    metrics: createMetrics("api-test"),
+    redis: null,
+    ...deps,
+  });
   await app.ready();
   return {
     app,

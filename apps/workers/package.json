@@ -1,0 +1,26 @@
+{
+  "name": "@civicpulse/workers",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --env-file-if-exists=../../.env src/main.ts",
+    "start": "node dist/main.js",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests",
+    "search:reindex": "tsx --env-file-if-exists=../../.env src/reindex.ts",
+    "dlq:redrive": "tsx --env-file-if-exists=../../.env src/redrive.ts"
+  },
+  "dependencies": {
+    "@civicpulse/db": "workspace:*",
+    "@civicpulse/events": "workspace:*",
+    "@civicpulse/platform": "workspace:*",
+    "@civicpulse/shared": "workspace:*",
+    "drizzle-orm": "^0.45.4",
+    "sharp": "^0.35.5"
+  },
+  "devDependencies": {
+    "tsup": "^9.0.0"
+  }
+}

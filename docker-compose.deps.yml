@@ -1,0 +1,83 @@
+# Backing services for integration tests and for trying the adapters locally.
+# This is NOT the deployment: the full stack runs in Kubernetes (see infrastructure/).
+# It needs about 2.5 GB of RAM, so on an 8 GB laptop start only what you need:
+#   docker compose -f docker-compose.deps.yml up -d redis
+name: civicpulse-deps
+services:
+  redis:
+    image: redis:7-alpine
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  kafka:
+    image: apache/kafka:4.4.0
+    ports: ["9092:9092"]
+    environment:
+      KAFKA_HEAP_OPTS: "-Xms384m -Xmx384m"
+      # Two listeners: localhost:9092 for processes on the host (tests), kafka:19092 for other containers.
+      KAFKA_NODE_ID: "1"
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,INTERNAL://:19092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:19092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: "1"
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: "1"
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: "0"
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1",
+        ]
+      interval: 5s
+      timeout: 10s
+      retries: 30
+
+  opensearch:
+    image: opensearchproject/opensearch:3.3.0
+    ports: ["9200:9200"]
+    environment:
+      discovery.type: single-node
+      DISABLE_SECURITY_PLUGIN: "true"
+      DISABLE_INSTALL_DEMO_CONFIG: "true"
+      OPENSEARCH_JAVA_OPTS: "-Xms512m -Xmx512m"
+      node.store.allow_mmap: "false"
+      # Test machines often report a nearly full shared disk; do not let that block index creation.
+      cluster.routing.allocation.disk.threshold_enabled: "false"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf localhost:9200/_cluster/health || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 40
+
+  seaweedfs:
+    image: chrislusf/seaweedfs:4.54
+    # Small volumes and a fixed volume count: SeaweedFS sizes its default volume limit from free disk.
+    command:
+      [
+        "server",
+        "-dir=/data",
+        "-volume.max=32",
+        "-master.volumeSizeLimitMB=128",
+        "-s3",
+        "-s3.config=/config/s3.json",
+        "-s3.port=8333",
+        "-ip.bind=0.0.0.0",
+      ]
+    ports: ["8333:8333"]
+    volumes:
+      - ./infrastructure/compose/seaweedfs-s3.json:/config/s3.json:ro
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget -qO- http://localhost:9333/cluster/status >/dev/null 2>&1 || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30

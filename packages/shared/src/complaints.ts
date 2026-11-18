@@ -316,6 +316,7 @@ export type AuditLog = z.infer<typeof auditLogSchema>;
 export const EVENT_TOPICS = {
   complaints: "civicpulse.complaints",
   platform: "civicpulse.platform",
+  deadLetter: "civicpulse.dlq",
 } as const;
 
 export const COMPLAINT_EVENT_TYPES = [
@@ -331,6 +332,8 @@ export const COMPLAINT_EVENT_TYPES = [
   "complaint.reopened",
   "complaint.commented",
   "complaint.attachment_added",
+  "complaint.sla_warning",
+  "complaint.sla_breached",
 ] as const;
 export type ComplaintEventType = (typeof COMPLAINT_EVENT_TYPES)[number];
 

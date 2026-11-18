@@ -1,0 +1,13 @@
+# Reference values for a real cluster: replicas, autoscaling and disruption budgets on.
+# Point `config` at managed data services and put real secrets in the existing Secret.
+webOrigin: https://civicpulse.example.org
+ingress:
+  host: civicpulse.example.org
+  tls:
+    - secretName: civicpulse-tls
+      hosts: [civicpulse.example.org]
+api: { replicas: 3 }
+web: { replicas: 3 }
+workers: { replicas: 2 }
+autoscaling: { enabled: true, minReplicas: 3, maxReplicas: 10 }
+podDisruptionBudget: { enabled: true }

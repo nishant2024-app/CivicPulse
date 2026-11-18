@@ -1,0 +1,22 @@
+{
+  "name": "@civicpulse/events",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@civicpulse/db": "workspace:*",
+    "@civicpulse/platform": "workspace:*",
+    "@civicpulse/shared": "workspace:*",
+    "@opentelemetry/api": "^1.10.0",
+    "drizzle-orm": "^0.45.4",
+    "kafkajs": "^2.2.4",
+    "sharp": "^0.35.5"
+  }
+}

@@ -1,3 +1,4 @@
+import path from "node:path";
 import type { NextConfig } from "next";
 
 const apiUrl = (process.env.API_INTERNAL_URL ?? "http://localhost:4000").replace(/\/$/, "");
@@ -20,6 +21,8 @@ const csp = [
 
 const config: NextConfig = {
   output: "standalone",
+  // In a monorepo the standalone server must trace files from the repository root.
+  outputFileTracingRoot: path.join(import.meta.dirname, "../.."),
   reactStrictMode: true,
   poweredByHeader: false,
   transpilePackages: ["@civicpulse/shared"],

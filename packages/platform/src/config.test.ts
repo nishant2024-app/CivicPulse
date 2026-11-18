@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ConfigError, loadConfig } from "./config";
+import { toSegments } from "./search";
 import { generateTrackingId, hashToken, TRACKING_ID_PATTERN } from "./tokens";
 
 const base = { DATABASE_URL: "postgres://u:p@localhost:5432/db" };
@@ -59,5 +60,22 @@ describe("tokens", () => {
   it("hashes tokens deterministically", () => {
     expect(hashToken("abc")).toBe(hashToken("abc"));
     expect(hashToken("abc")).toHaveLength(64);
+  });
+});
+
+describe("search highlight segments", () => {
+  it("splits matches from text and never lets marker characters through", () => {
+    expect(toSegments("A \u27e6pothole\u27e7 at the \u27e6gate\u27e7")).toEqual([
+      { text: "A ", match: false },
+      { text: "pothole", match: true },
+      { text: " at the ", match: false },
+      { text: "gate", match: true },
+    ]);
+    expect(toSegments("plain")).toEqual([{ text: "plain", match: false }]);
+    // An unterminated marker still yields clean text.
+    expect(toSegments("broken \u27e6match")).toEqual([
+      { text: "broken ", match: false },
+      { text: "match", match: true },
+    ]);
   });
 });

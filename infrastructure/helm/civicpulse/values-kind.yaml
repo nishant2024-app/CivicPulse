@@ -1,0 +1,22 @@
+# Ephemeral demonstration cluster (kind): locally built images, plain HTTP, one replica each.
+image:
+  prefix: civicpulse
+  pullPolicy: IfNotPresent
+
+webOrigin: http://civicpulse.localtest.me:8080
+allowInsecureHttp: true
+
+ingress:
+  host: civicpulse.localtest.me
+
+config:
+  LOG_LEVEL: info
+  API_DOCS_ENABLED: "true"
+  # The browser tests sign in many times from one address. Rate limiting against a shared
+  # Redis is covered by the integration tests (apps/api/test/integration/redis*).
+  RATE_LIMIT_ENABLED: "false"
+
+api: { replicas: 1 }
+web: { replicas: 1 }
+podDisruptionBudget: { enabled: false }
+seed: { enabled: true }

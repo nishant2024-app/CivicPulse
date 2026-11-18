@@ -1,0 +1,11 @@
+{
+  "identities": [
+    {
+      "name": "civicpulse",
+      "credentials": [
+        { "accessKey": "civicpulse-dev-access", "secretKey": "civicpulse-dev-secret-key-change-me" }
+      ],
+      "actions": ["Admin", "Read", "Write", "List", "Tagging"]
+    }
+  ]
+}

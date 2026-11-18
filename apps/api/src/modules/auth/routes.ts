@@ -18,7 +18,7 @@ const AUTH_RATE_LIMIT = { rateLimit: { max: 10, timeWindow: "1 minute" } };
 const okSchema = z.object({ ok: z.literal(true) });
 
 export const authRoutes: FastifyPluginAsyncZod = async (app) => {
-  const deps = { db: app.db, config: app.config, mailer: app.mailer };
+  const deps = { db: app.db, config: app.config, mailer: app.mailer, queues: app.queues };
 
   app.post(
     "/register",

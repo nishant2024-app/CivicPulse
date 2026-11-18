@@ -112,10 +112,12 @@ export const trackingRoutes: FastifyPluginAsyncZod = async (app) => {
             note: ["REJECTED", "RESOLVED", "ON_HOLD"].includes(entry.status) ? entry.note : null,
             at: entry.at.toISOString(),
           })),
-          resolutionPhotos: photos.map((photo) => ({
-            url: app.storage.signedUrl(photo.storageKey),
-            thumbnailUrl: app.storage.signedUrl(photo.thumbnailKey ?? photo.storageKey),
-          })),
+          resolutionPhotos: await Promise.all(
+            photos.map(async (photo) => ({
+              url: await app.storage.signedUrl(photo.storageKey),
+              thumbnailUrl: await app.storage.signedUrl(photo.thumbnailKey ?? photo.storageKey),
+            })),
+          ),
         };
       });
     },

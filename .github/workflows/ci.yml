@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  # Local-only credentials for the throwaway service container below.
+  # Local-only credentials for the throwaway service containers below.
   TEST_DATABASE_URL: postgres://civicpulse:civicpulse@localhost:5432/civicpulse_test
   DATABASE_URL: postgres://civicpulse:civicpulse@localhost:5432/civicpulse_test
 
@@ -44,12 +44,43 @@ jobs:
       - run: pnpm format:check
       - run: pnpm lint
       - run: pnpm typecheck
-      - name: Unit and integration tests
+      - name: Unit and database integration tests
         run: pnpm test
       - run: pnpm build
 
+  integration:
+    name: Integration (Redis, Kafka, OpenSearch, S3)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: civicpulse
+          POSTGRES_PASSWORD: civicpulse
+          POSTGRES_DB: civicpulse_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U civicpulse -d civicpulse_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Start Redis, Kafka, OpenSearch and the S3 store
+        run: docker compose -f docker-compose.deps.yml up -d --wait
+      - name: Run the integration suites against the real services
+        run: pnpm --filter @civicpulse/api test:integration
+      - name: Service logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.deps.yml logs --tail 80
+
   e2e:
-    name: End-to-end (browser)
+    name: End-to-end (browser, single process)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     needs: verify

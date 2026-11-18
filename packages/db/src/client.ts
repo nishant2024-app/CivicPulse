@@ -1,3 +1,4 @@
+import { SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { sql } from "drizzle-orm";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import pg from "pg";
@@ -50,31 +51,52 @@ export function createDb(options: DbOptions): Db {
   // An idle client erroring (e.g. the server closed it) must not crash the process.
   pool.on("error", () => undefined);
 
-  if (options.onQuery) {
-    const onQuery = options.onQuery;
-    pool.on("connect", (client) => {
-      const original = client.query.bind(client) as (...args: unknown[]) => unknown;
-      (client as unknown as { query: (...args: unknown[]) => unknown }).query = (
-        ...args: unknown[]
-      ) => {
-        const started = performance.now();
-        const result = original(...args);
-        if (result instanceof Promise) {
-          return result.then(
-            (value) => {
-              onQuery(performance.now() - started, false);
-              return value;
-            },
-            (error) => {
-              onQuery(performance.now() - started, true);
-              throw error;
-            },
-          );
+  // Time and trace every query. A span is created only inside an existing trace, so
+  // background polling does not flood the tracing backend with root spans.
+  const tracer = trace.getTracer("civicpulse-db");
+  pool.on("connect", (client) => {
+    const original = client.query.bind(client) as (...args: unknown[]) => unknown;
+    (client as unknown as { query: (...args: unknown[]) => unknown }).query = (
+      ...args: unknown[]
+    ) => {
+      const started = performance.now();
+      const text =
+        typeof args[0] === "string"
+          ? args[0]
+          : ((args[0] as { text?: string } | undefined)?.text ?? "");
+      const span = trace.getActiveSpan()
+        ? tracer.startSpan(`pg ${text.trim().split(/\s+/, 1)[0]?.toUpperCase() ?? "QUERY"}`, {
+            kind: SpanKind.CLIENT,
+            attributes: { "db.system": "postgresql", "db.statement": text.slice(0, 300) },
+          })
+        : undefined;
+      const finish = (failed: boolean, error?: unknown) => {
+        options.onQuery?.(performance.now() - started, failed);
+        if (span) {
+          if (failed)
+            span.setStatus({
+              code: SpanStatusCode.ERROR,
+              message: (error as Error | undefined)?.message,
+            });
+          span.end();
         }
-        return result;
       };
-    });
-  }
+      const result = original(...args);
+      if (result instanceof Promise) {
+        return result.then(
+          (value) => {
+            finish(false);
+            return value;
+          },
+          (error) => {
+            finish(true, error);
+            throw error;
+          },
+        );
+      }
+      return result;
+    };
+  });
 
   const db = drizzle(pool, { schema });
 

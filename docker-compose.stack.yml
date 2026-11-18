@@ -1,0 +1,113 @@
+# The whole system on one machine, using locally built images. Needs about 5 GB of free RAM,
+# so it is for machines with 16 GB or more (or a Codespace). Kubernetes is the real deployment
+# (infrastructure/); this file exists for quick experiments and for verifying the images.
+#
+#   docker build -f infrastructure/docker/Dockerfile --target api     -t civicpulse-api:dev .
+#   docker build -f infrastructure/docker/Dockerfile --target workers -t civicpulse-workers:dev .
+#   docker build -f infrastructure/docker/Dockerfile --target web     -t civicpulse-web:dev .
+#   docker compose -f docker-compose.stack.yml up -d
+#
+# App http://localhost:3000 · Grafana :3001 (admin/admin) · Jaeger :16686 · Prometheus :9090 · Mail :8025
+name: civicpulse
+include:
+  - docker-compose.deps.yml
+
+x-app-env: &app-env
+  NODE_ENV: production
+  ALLOW_INSECURE_HTTP: "true"
+  WEB_ORIGIN: http://localhost:3000
+  TRUST_PROXY: "true"
+  DATABASE_URL: postgres://civicpulse:civicpulse@postgres:5432/civicpulse
+  SESSION_SECRET: compose-only-secret-compose-only-secret-0123456789
+  EMBEDDED_WORKERS: "false"
+  RATE_LIMIT_ENABLED: "false"
+  API_DOCS_ENABLED: "true"
+  REDIS_URL: redis://redis:6379
+  EVENT_BROKER: kafka
+  KAFKA_BROKERS: kafka:19092
+  SEARCH_DRIVER: opensearch
+  OPENSEARCH_URL: http://opensearch:9200
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://seaweedfs:8333
+  S3_BUCKET: civicpulse
+  S3_ACCESS_KEY_ID: civicpulse-dev-access
+  S3_SECRET_ACCESS_KEY: civicpulse-dev-secret-key-change-me
+  EMAIL_DRIVER: smtp
+  SMTP_URL: smtp://mailpit:1025
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      { POSTGRES_USER: civicpulse, POSTGRES_PASSWORD: civicpulse, POSTGRES_DB: civicpulse }
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U civicpulse -d civicpulse"]
+      interval: 3s
+      timeout: 3s
+      retries: 30
+
+  mailpit:
+    image: axllent/mailpit:v1.34.0
+    ports: ["8025:8025"]
+
+  jaeger:
+    image: jaegertracing/jaeger:2.23.0
+    ports: ["16686:16686"]
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.140.0
+    command: ["--config=/conf/config.yaml"]
+    volumes:
+      - ./infrastructure/helm/civicpulse-platform/files/otel-collector.yaml:/conf/config.yaml:ro
+    depends_on: [jaeger]
+
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    ports: ["9090:9090"]
+    volumes:
+      - ./infrastructure/compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:12.2.0
+    ports: ["3001:3000"]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+    volumes:
+      - ./infrastructure/helm/civicpulse-platform/files/grafana/datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./infrastructure/helm/civicpulse-platform/files/grafana/dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./infrastructure/helm/civicpulse-platform/files/grafana/dashboards:/var/lib/grafana/dashboards:ro
+
+  migrate:
+    image: civicpulse-api:dev
+    command: ["node", "dist/migrate.js"]
+    environment: *app-env
+    depends_on: { postgres: { condition: service_healthy } }
+    restart: "no"
+
+  api:
+    image: civicpulse-api:dev
+    environment: *app-env
+    ports: ["4000:4000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      redis: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
+
+  workers:
+    image: civicpulse-workers:dev
+    environment: *app-env
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      kafka: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      opensearch: { condition: service_healthy }
+      seaweedfs: { condition: service_healthy }
+
+  web:
+    image: civicpulse-web:dev
+    ports: ["3000:3000"]
+    depends_on: [api]

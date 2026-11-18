@@ -1,0 +1,5 @@
+apiVersion: v2
+name: civicpulse-apps
+description: The Argo CD AppProject and Applications that make up a CivicPulse environment.
+type: application
+version: 0.1.0

@@ -203,3 +203,14 @@ test("administrator dashboard and audit log reflect what happened", async () => 
   ).toBeVisible();
   await expect(adminPage.getByText("created department “Electrical maintenance”")).toBeVisible();
 });
+
+test("administrator finds the report with search, matches highlighted", async () => {
+  await nav(adminPage, "Search");
+  await adminPage.getByLabel("Search reports").fill("streetlight");
+  const hit = adminPage.getByRole("link", { name: new RegExp(title) });
+  await expect(hit).toBeVisible();
+  await expect(hit.locator("mark").first()).toBeVisible();
+  // Filters narrow the result; a word that is not there finds nothing.
+  await adminPage.getByLabel("Search reports").fill("zebra crossing paint");
+  await expect(adminPage.getByRole("heading", { name: "No reports match" })).toBeVisible();
+});

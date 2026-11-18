@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: civicpulse-config
+  labels: {{- include "cp.labels" (dict "name" "civicpulse" "root" .) | nindent 4 }}
+data:
+  WEB_ORIGIN: {{ .Values.webOrigin | quote }}
+  ALLOW_INSECURE_HTTP: {{ .Values.allowInsecureHttp | quote }}
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ $value | quote }}
+  {{- end }}

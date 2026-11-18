@@ -1,0 +1,277 @@
+{{- if .Values.otelCollector.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector
+  labels: {{- include "cp.labels" (dict "name" "otel-collector" "root" .) | nindent 4 }}
+data:
+  config.yaml: |
+{{ .Files.Get "files/otel-collector.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  labels: {{- include "cp.labels" (dict "name" "otel-collector" "root" .) | nindent 4 }}
+spec:
+  selector: {{- include "cp.selector" (dict "name" "otel-collector" "root" .) | nindent 4 }}
+  ports:
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: span-metrics, port: 8889, targetPort: 8889 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  labels: {{- include "cp.labels" (dict "name" "otel-collector" "root" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cp.selector" (dict "name" "otel-collector" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cp.labels" (dict "name" "otel-collector" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get "files/otel-collector.yaml" | sha256sum }}
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8889"
+        prometheus.io/path: /metrics
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: collector
+          image: {{ .Values.otelCollector.image }}
+          args: ["--config=/conf/config.yaml"]
+          ports:
+            - { name: otlp-http, containerPort: 4318 }
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: span-metrics, containerPort: 8889 }
+          readinessProbe:
+            httpGet: { path: /, port: 13133 }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources: {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /conf, readOnly: true }
+      volumes:
+        - name: config
+          configMap: { name: otel-collector }
+{{- end }}
+{{- if .Values.jaeger.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  labels: {{- include "cp.labels" (dict "name" "jaeger" "root" .) | nindent 4 }}
+spec:
+  selector: {{- include "cp.selector" (dict "name" "jaeger" "root" .) | nindent 4 }}
+  ports:
+    - { name: ui, port: 16686, targetPort: 16686 }
+    - { name: otlp-grpc, port: 4317, targetPort: 4317 }
+    - { name: otlp-http, port: 4318, targetPort: 4318 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: jaeger
+  labels: {{- include "cp.labels" (dict "name" "jaeger" "root" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cp.selector" (dict "name" "jaeger" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cp.labels" (dict "name" "jaeger" "root" .) | nindent 8 }}
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, runAsGroup: 10001, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: jaeger
+          image: {{ .Values.jaeger.image }}
+          ports:
+            - { name: ui, containerPort: 16686 }
+            - { name: otlp-grpc, containerPort: 4317 }
+            - { name: otlp-http, containerPort: 4318 }
+          readinessProbe:
+            httpGet: { path: /, port: 16686 }
+            periodSeconds: 5
+          securityContext: {{- include "cp.containerSecurity" . | nindent 12 }}
+          resources: {{- toYaml .Values.jaeger.resources | nindent 12 }}
+{{- end }}
+{{- if .Values.prometheus.enabled }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+rules:
+  # Scoped to this namespace: Prometheus discovers only CivicPulse pods.
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: Role, name: prometheus }
+subjects:
+  - { kind: ServiceAccount, name: prometheus, namespace: {{ .Release.Namespace }} }
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+data:
+  prometheus.yml: |
+{{ .Files.Get "files/prometheus-k8s.yml" | replace "role: pod" (printf "role: pod\n        namespaces:\n          names: [%s]" .Release.Namespace) | indent 4 }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+spec:
+  selector: {{- include "cp.selector" (dict "name" "prometheus" "root" .) | nindent 4 }}
+  ports:
+    - { name: http, port: 9090, targetPort: 9090 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus
+  labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 4 }}
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector:
+    matchLabels: {{- include "cp.selector" (dict "name" "prometheus" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cp.labels" (dict "name" "prometheus" "root" .) | nindent 8 }}
+      annotations:
+        checksum/config: {{ .Files.Get "files/prometheus-k8s.yml" | sha256sum }}
+    spec:
+      serviceAccountName: prometheus
+      securityContext: { runAsNonRoot: true, runAsUser: 65534, runAsGroup: 65534, fsGroup: 65534, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: prometheus
+          image: {{ .Values.prometheus.image }}
+          args:
+            - --config.file=/etc/prometheus/prometheus.yml
+            - --storage.tsdb.path=/prometheus
+            - --storage.tsdb.retention.time={{ .Values.prometheus.retention }}
+            - --web.enable-lifecycle
+          ports:
+            - { name: http, containerPort: 9090 }
+          readinessProbe:
+            httpGet: { path: /-/ready, port: 9090 }
+            periodSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: ["ALL"] }
+          resources: {{- toYaml .Values.prometheus.resources | nindent 12 }}
+          volumeMounts:
+            - { name: config, mountPath: /etc/prometheus, readOnly: true }
+            - { name: data, mountPath: /prometheus }
+      volumes:
+        - name: config
+          configMap: { name: prometheus }
+        - { name: data, emptyDir: {} }
+{{- end }}
+{{- if .Values.grafana.enabled }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-provisioning
+  labels: {{- include "cp.labels" (dict "name" "grafana" "root" .) | nindent 4 }}
+data:
+  datasources.yaml: |
+{{ .Files.Get "files/grafana/datasources.yaml" | indent 4 }}
+  dashboards.yaml: |
+{{ .Files.Get "files/grafana/dashboards.yaml" | indent 4 }}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  labels: {{- include "cp.labels" (dict "name" "grafana" "root" .) | nindent 4 }}
+data:
+{{- range $path, $_ := .Files.Glob "files/grafana/dashboards/*.json" }}
+  {{ base $path }}: |
+{{ $.Files.Get $path | indent 4 }}
+{{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: grafana
+  labels: {{- include "cp.labels" (dict "name" "grafana" "root" .) | nindent 4 }}
+spec:
+  selector: {{- include "cp.selector" (dict "name" "grafana" "root" .) | nindent 4 }}
+  ports:
+    - { name: http, port: 3000, targetPort: 3000 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  labels: {{- include "cp.labels" (dict "name" "grafana" "root" .) | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {{- include "cp.selector" (dict "name" "grafana" "root" .) | nindent 6 }}
+  template:
+    metadata:
+      labels: {{- include "cp.labels" (dict "name" "grafana" "root" .) | nindent 8 }}
+      annotations:
+        checksum/dashboards: {{ (.Files.Glob "files/grafana/dashboards/*.json").AsConfig | sha256sum }}
+    spec:
+      securityContext: { runAsNonRoot: true, runAsUser: 472, runAsGroup: 472, fsGroup: 472, seccompProfile: { type: RuntimeDefault } }
+      containers:
+        - name: grafana
+          image: {{ .Values.grafana.image }}
+          ports:
+            - { name: http, containerPort: 3000 }
+          env:
+            - { name: GF_SECURITY_ADMIN_USER, value: admin }
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.existingSecret }}, key: grafana-admin-password } }
+            - { name: GF_USERS_ALLOW_SIGN_UP, value: "false" }
+            - { name: GF_ANALYTICS_REPORTING_ENABLED, value: "false" }
+            - { name: GF_ANALYTICS_CHECK_FOR_UPDATES, value: "false" }
+          readinessProbe:
+            httpGet: { path: /api/health, port: 3000 }
+            periodSeconds: 5
+            failureThreshold: 30
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: { drop: ["ALL"] }
+          resources: {{- toYaml .Values.grafana.resources | nindent 12 }}
+          volumeMounts:
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/datasources/datasources.yaml, subPath: datasources.yaml, readOnly: true }
+            - { name: provisioning, mountPath: /etc/grafana/provisioning/dashboards/dashboards.yaml, subPath: dashboards.yaml, readOnly: true }
+            - { name: dashboards, mountPath: /var/lib/grafana/dashboards, readOnly: true }
+            - { name: data, mountPath: /var/lib/grafana }
+      volumes:
+        - name: provisioning
+          configMap: { name: grafana-provisioning }
+        - name: dashboards
+          configMap: { name: grafana-dashboards }
+        - { name: data, emptyDir: {} }
+{{- end }}

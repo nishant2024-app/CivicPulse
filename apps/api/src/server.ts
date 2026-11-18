@@ -1,11 +1,5 @@
-import { createDb } from "@civicpulse/db";
-import {
-  ConfigError,
-  createLocalStorage,
-  createLogger,
-  createLogMailer,
-  loadConfig,
-} from "@civicpulse/platform";
+import { createRuntime } from "@civicpulse/events";
+import { ConfigError, loadConfig } from "@civicpulse/platform";
 import { buildApp } from "./app";
 
 async function main(): Promise<void> {
@@ -20,19 +14,33 @@ async function main(): Promise<void> {
     throw error;
   }
 
-  const db = createDb({
-    connectionString: config.DATABASE_URL,
-    maxConnections: config.DATABASE_POOL_MAX,
+  // Jobs go to BullMQ only when a separate workers process exists to run them.
+  const runtime = createRuntime(config, {
+    service: "api",
+    useQueues: !!config.REDIS_URL && !config.EMBEDDED_WORKERS,
   });
-  const mailer = createLogMailer(createLogger(config.LOG_LEVEL, "mailer"), {
-    logBodies: !config.isProduction,
+  const { logger } = runtime;
+
+  await runtime.storage
+    .ensureReady()
+    .catch((error: unknown) => logger.warn({ err: error }, "object storage is not ready yet"));
+  if (runtime.search.driver === "opensearch") {
+    await runtime.search
+      .ensureIndex()
+      .catch((error: unknown) => logger.warn({ err: error }, "search index is not ready yet"));
+  }
+
+  const app = await buildApp({
+    config,
+    db: runtime.db,
+    mailer: runtime.mailer,
+    storage: runtime.storage,
+    cache: runtime.cache,
+    queues: runtime.queues,
+    search: runtime.search,
+    metrics: runtime.metrics,
+    redis: runtime.redis,
   });
-  const storage = createLocalStorage({
-    directory: config.STORAGE_LOCAL_DIR,
-    signingSecret: config.SESSION_SECRET,
-    urlPrefix: "/api/v1/files",
-  });
-  const app = await buildApp({ config, db, mailer, storage });
 
   let shuttingDown = false;
   const shutdown = async (signal: string) => {
@@ -41,7 +49,7 @@ async function main(): Promise<void> {
     app.log.info({ signal }, "shutting down");
     try {
       await app.close(); // stops accepting connections, waits for in-flight requests
-      await db.close();
+      await runtime.close();
       process.exit(0);
     } catch (error) {
       app.log.error({ err: error }, "error during shutdown");

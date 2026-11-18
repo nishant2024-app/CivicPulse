@@ -12,8 +12,10 @@ import { hashPassword } from "./modules/auth/passwords";
 import { seedOrganizationDefaults } from "./modules/organizations/service";
 
 const config = loadConfig();
-if (config.isProduction) {
-  console.error("Refusing to seed demo data in production");
+if (config.isProduction && process.env.ALLOW_DEMO_SEED !== "true") {
+  console.error(
+    "Refusing to seed demo data in production (set ALLOW_DEMO_SEED=true for a demo cluster)",
+  );
   process.exit(1);
 }
 

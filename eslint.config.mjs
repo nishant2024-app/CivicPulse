@@ -29,7 +29,7 @@ export default tseslint.config(
   },
   {
     // CLI entry points print to the terminal by design.
-    files: ["**/seed.ts", "**/migrate.ts", "scripts/**"],
+    files: ["**/seed.ts", "**/migrate.ts", "**/redrive.ts", "**/reindex.ts", "scripts/**"],
     rules: { "no-console": "off" },
   },
 );

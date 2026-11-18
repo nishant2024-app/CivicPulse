@@ -1,0 +1,16 @@
+**/node_modules
+**/dist
+**/.next
+**/coverage
+.git
+.github
+.data
+.env
+.env.*
+!.env.example
+test-results
+playwright-report
+infrastructure/terraform/**/.terraform
+*.tfstate*
+docs
+e2e

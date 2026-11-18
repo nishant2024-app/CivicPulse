@@ -1,0 +1,23 @@
+{{- if .Values.ingress.enabled }}
+{{- $root := . }}
+{{- range $name, $target := dict "grafana" (dict "enabled" .Values.grafana.enabled "service" "grafana" "port" 3000) "jaeger" (dict "enabled" .Values.jaeger.enabled "service" "jaeger" "port" 16686) "prometheus" (dict "enabled" .Values.prometheus.enabled "service" "prometheus" "port" 9090) "mail" (dict "enabled" .Values.mailpit.enabled "service" "mailpit" "port" 8025) }}
+{{- if $target.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ $name }}
+  labels: {{- include "cp.labels" (dict "name" $name "root" $root) | nindent 4 }}
+spec:
+  ingressClassName: {{ $root.Values.ingress.className }}
+  rules:
+    - host: {{ index $root.Values.ingress.hosts $name }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: {{ $target.service }}, port: { number: {{ $target.port }} } }
+{{- end }}
+{{- end }}
+{{- end }}

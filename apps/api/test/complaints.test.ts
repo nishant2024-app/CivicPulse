@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, isNull } from "drizzle-orm";
 import sharp from "sharp";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
@@ -9,8 +9,7 @@ import {
   outboxEvents,
   users,
 } from "@civicpulse/db";
-import { notificationConsumer } from "../src/events/notification-consumer";
-import { createEventPump } from "../src/events/pump";
+import { createMemoryBroker, createRelay, notificationHandler } from "@civicpulse/events";
 import {
   Client,
   createOrganizationWithAdmin,
@@ -102,7 +101,7 @@ describe("complaint lifecycle", () => {
     // 3–4. The event is in the outbox and becomes notifications when processed.
     const pending = await ctx.db.withSystem((tx) => tx.select().from(outboxEvents));
     expect(pending.map((e) => e.eventType)).toEqual(["complaint.created"]);
-    expect(await ctx.app.events.drain()).toBe(1);
+    expect(await ctx.app.events!.drain()).toBe(1);
     const afterCreate = await ctx.db.withSystem((tx) => tx.select().from(notifications));
     // The administrator is told; the reporter is not notified about their own action.
     expect(afterCreate.map((n) => n.userId)).toEqual([org.userId]);
@@ -141,7 +140,7 @@ describe("complaint lifecycle", () => {
     expect(resolved.resolvedAt).not.toBeNull();
 
     // 8. Citizen sees the updated status and the full history, without staff instructions.
-    await ctx.app.events.drain();
+    await ctx.app.events!.drain();
     const citizenView = (await citizen.client.get(`${api}/complaints/${id}`)).json();
     expect(citizenView.history.map((h: { toStatus: string }) => h.toStatus)).toEqual([
       "REPORTED",
@@ -190,14 +189,14 @@ describe("complaint lifecycle", () => {
     });
     await status(worker.client, id, "IN_PROGRESS");
     await status(worker.client, id, "RESOLVED", "Patched");
-    await ctx.app.events.drain();
+    await ctx.app.events!.drain();
 
     expect((await status(citizen.client, id, "REOPENED")).statusCode).toBe(400);
     const reopened = (
       await status(citizen.client, id, "REOPENED", "Hole is back after rain")
     ).json();
     expect(reopened).toMatchObject({ status: "REOPENED", reopenedCount: 1, assignedWorker: null });
-    await ctx.app.events.drain();
+    await ctx.app.events!.drain();
     const titles = async (c: Client) =>
       (await c.get(`${api}/notifications`)).json().data.map((n: { title: string }) => n.title);
     expect(await titles(worker.client)).toContain("Report reopened");
@@ -487,11 +486,11 @@ describe("photo uploads", () => {
 describe("event processing", () => {
   it("handles a duplicate delivery once", async () => {
     await report();
-    await ctx.app.events.drain();
+    await ctx.app.events!.drain();
     const before = await ctx.db.withSystem((tx) => tx.select().from(notifications));
     // Simulate the relay crashing after handling but before marking the row published.
     await ctx.db.withSystem((tx) => tx.update(outboxEvents).set({ publishedAt: null }));
-    expect(await ctx.app.events.drain()).toBe(1);
+    expect(await ctx.app.events!.drain()).toBe(1);
     const after = await ctx.db.withSystem((tx) => tx.select().from(notifications));
     expect(after).toHaveLength(before.length);
   });
@@ -499,24 +498,22 @@ describe("event processing", () => {
   it("retries a failing consumer, then dead-letters it without blocking other events", async () => {
     await report();
     let calls = 0;
-    const pump = createEventPump(
+    const failing = {
+      group: "always-fails",
+      async handle() {
+        calls += 1;
+        throw new Error("search index unavailable");
+      },
+    };
+    const quiet = { info() {}, warn() {}, error() {} } as never;
+    const deps = { ...ctx.app.eventDeps, logger: quiet };
+    const relay = createRelay(
       ctx.db,
-      [
-        {
-          group: "always-fails",
-          async handle() {
-            calls += 1;
-            throw new Error("search index unavailable");
-          },
-        },
-        notificationConsumer,
-      ],
-      { info() {}, warn() {}, error() {} },
+      createMemoryBroker(deps, [failing, notificationHandler], { backoffMs: 1 }),
+      quiet,
     );
-    for (let attempt = 0; attempt < 5; attempt++) {
-      await ctx.db.withSystem((tx) => tx.update(outboxEvents).set({ nextAttemptAt: new Date(0) }));
-      await pump.drain();
-    }
+    expect(await relay.drain()).toBe(1);
+
     expect(calls).toBe(5);
     const dead = await ctx.db.withSystem((tx) => tx.select().from(deadLetterEvents));
     expect(dead).toHaveLength(1);
@@ -533,11 +530,56 @@ describe("event processing", () => {
     );
     expect(first).toHaveLength(1);
     await report(citizen.client, { title: "Second report after the failure" });
-    await pump.drain();
+    await relay.drain();
     const both = await ctx.db.withSystem((tx) =>
       tx.select().from(notifications).where(eq(notifications.userId, org.userId)),
     );
     expect(both).toHaveLength(2);
+  });
+
+  it("keeps events pending, in order, while the broker is down and delivers them afterwards", async () => {
+    await report();
+    await report(citizen.client, { title: "Another report while the broker is down" });
+    let up = false;
+    const delivered: string[] = [];
+    const quiet = { info() {}, warn() {}, error() {} } as never;
+    const relay = createRelay(
+      ctx.db,
+      {
+        driver: "memory",
+        async publish(event) {
+          if (!up) throw new Error("broker unavailable");
+          delivered.push(event.id);
+        },
+      },
+      quiet,
+    );
+    expect(await relay.drain()).toBe(0);
+    const pending = await ctx.db.withSystem((tx) =>
+      tx.select().from(outboxEvents).where(isNull(outboxEvents.publishedAt)),
+    );
+    expect(pending).toHaveLength(2);
+    expect(pending.some((row) => row.attempts > 0 && row.lastError === "broker unavailable")).toBe(
+      true,
+    );
+
+    up = true;
+    // The relay backs off after a failure; a new relay (restart) tries immediately.
+    const restarted = createRelay(
+      ctx.db,
+      {
+        driver: "memory",
+        async publish(e) {
+          delivered.push(e.id);
+        },
+      },
+      quiet,
+    );
+    expect(await restarted.drain()).toBe(2);
+    const orderRows = await ctx.db.withSystem((tx) =>
+      tx.select().from(outboxEvents).orderBy(outboxEvents.createdAt),
+    );
+    expect(delivered).toEqual(orderRows.map((row) => row.id));
   });
 
   it("commits no event when the business change fails", async () => {
@@ -571,6 +613,9 @@ describe("departments, members and analytics", () => {
     await status(worker.client, a.id, "RESOLVED", "Done");
     await citizen.client.post(`${api}/complaints/${a.id}/feedback`, { rating: 4 });
 
+    // Figures are cached; the cache consumer drops them when the complaint events are processed.
+    expect((await org.client.get(`${api}/analytics/overview`)).json().total).toBe(0);
+    await ctx.app.events!.drain();
     const overview = (await org.client.get(`${api}/analytics/overview`)).json();
     expect(overview).toMatchObject({
       total: 3,
@@ -598,13 +643,14 @@ describe("departments, members and analytics", () => {
       { latitude: 12.972, longitude: 77.595, count: 1 },
     ]);
 
-    // Overdue is derived from the deadline, not stored.
+    // Overdue is derived from the deadline, not stored. (This edit bypasses events, so drop the cache.)
     await ctx.db.withSystem((tx) =>
       tx
         .update(complaints)
         .set({ slaDueAt: new Date(Date.now() - 1000) })
         .where(eq(complaints.status, "REPORTED")),
     );
+    await ctx.app.cache.deleteByPrefix("analytics:");
     expect((await org.client.get(`${api}/analytics/overview`)).json().overdue).toBe(1);
     expect((await org.client.get(`${api}/complaints?state=overdue`)).json().data).toHaveLength(1);
 

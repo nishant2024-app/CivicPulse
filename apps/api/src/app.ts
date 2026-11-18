@@ -14,13 +14,24 @@ import { randomUUID } from "node:crypto";
 import multipart from "@fastify/multipart";
 import type { Db } from "@civicpulse/db";
 import {
+  ALL_HANDLERS,
+  createMemoryBroker,
+  createRelay,
+  type EventDeps,
+  type Relay,
+} from "@civicpulse/events";
+import {
   loggerOptions,
   type AppConfig,
+  type Cache,
+  type JobQueues,
+  type Logger,
   type Mailer,
+  type Metrics,
   type ObjectStorage,
+  type Redis,
+  type SearchIndex,
 } from "@civicpulse/platform";
-import { notificationConsumer } from "./events/notification-consumer";
-import { createEventPump, type EventPump } from "./events/pump";
 import { analyticsRoutes } from "./modules/analytics/routes";
 import { authRoutes } from "./modules/auth/routes";
 import { complaintRoutes } from "./modules/complaints/routes";
@@ -30,9 +41,11 @@ import { healthRoutes } from "./modules/health/routes";
 import { notificationRoutes } from "./modules/notifications/routes";
 import { organizationAdminRoutes } from "./modules/organizations/admin-routes";
 import { organizationRoutes } from "./modules/organizations/routes";
+import { searchRoutes } from "./modules/search/routes";
 import { trackingRoutes } from "./modules/tracking/routes";
 import { userRoutes } from "./modules/users/routes";
 import { authPlugin } from "./plugins/auth";
+import { observabilityPlugin } from "./plugins/observability";
 import { registerErrorHandler } from "./plugins/error-handler";
 
 declare module "fastify" {
@@ -41,7 +54,15 @@ declare module "fastify" {
     db: Db;
     mailer: Mailer;
     storage: ObjectStorage;
-    events: EventPump;
+    cache: Cache;
+    /** Null when jobs run inline (no Redis, or workers embedded in this process). */
+    queues: JobQueues | null;
+    searchIndex: SearchIndex;
+    metrics: Metrics;
+    redis: Redis | null;
+    /** Outbox relay running in this process; null when a separate worker process owns it. */
+    events: Relay | null;
+    eventDeps: EventDeps;
   }
 }
 
@@ -50,6 +71,12 @@ export interface AppDependencies {
   db: Db;
   mailer: Mailer;
   storage: ObjectStorage;
+  cache: Cache;
+  queues: JobQueues | null;
+  search: SearchIndex;
+  metrics: Metrics;
+  /** Connection used as the rate-limit store; null for in-process counters. */
+  redis: Redis | null;
 }
 
 /** Assemble the HTTP application. All I/O dependencies are injected, so tests build the same app. */
@@ -79,11 +106,42 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
   app.decorate("mailer", deps.mailer);
   app.decorate("storage", deps.storage);
 
-  // Outbox relay and consumers. Embedded by default; a separate worker can take over.
-  const events = createEventPump(deps.db, [notificationConsumer], app.log);
-  app.decorate("events", events);
-  if (config.EMBEDDED_WORKERS && !config.isTest) events.start();
-  app.addHook("onClose", () => events.stop());
+  app.decorate("cache", deps.cache);
+  app.decorate("queues", deps.queues);
+  app.decorate("searchIndex", deps.search);
+  app.decorate("metrics", deps.metrics);
+  app.decorate("redis", deps.redis);
+
+  const eventDeps: EventDeps = {
+    db: deps.db,
+    logger: app.log as unknown as Logger,
+    search: deps.search,
+    cache: deps.cache,
+    queues: deps.queues,
+    mailer: deps.mailer,
+    storage: deps.storage,
+    webOrigin: config.WEB_ORIGIN,
+    metrics: deps.metrics,
+  };
+  app.decorate("eventDeps", eventDeps);
+
+  // Embedded mode: this process relays outbox events and runs every consumer itself.
+  // With EVENT_BROKER=kafka the separate workers process does both, and the API only writes
+  // to the outbox.
+  const relay =
+    config.EMBEDDED_WORKERS && config.EVENT_BROKER === "memory"
+      ? createRelay(
+          deps.db,
+          createMemoryBroker(eventDeps, ALL_HANDLERS),
+          app.log as unknown as Logger,
+          deps.metrics,
+        )
+      : null;
+  app.decorate("events", relay);
+  if (relay && !config.isTest) relay.start();
+  app.addHook("onClose", async () => {
+    await relay?.stop();
+  });
 
   registerErrorHandler(app);
 
@@ -116,6 +174,9 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       global: true,
       max: 300,
       timeWindow: "1 minute",
+      // Shared counters across replicas when Redis is available. If Redis fails, requests
+      // are allowed rather than rejected: an outage must not take the API down with it.
+      ...(deps.redis ? { redis: deps.redis, nameSpace: "cp:rl:", skipOnError: true } : {}),
       // Throwing lets the shared error handler render the standard envelope.
       errorResponseBuilder: (_request, context) => {
         const error = new Error("Too many requests") as Error & { statusCode: number };
@@ -144,6 +205,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
     await app.register(swaggerUi, { routePrefix: "/api/docs" });
   }
 
+  await app.register(observabilityPlugin);
   await app.register(authPlugin);
 
   await app.register(healthRoutes);
@@ -158,6 +220,7 @@ export async function buildApp(deps: AppDependencies): Promise<FastifyInstance> 
       await v1.register(trackingRoutes, { prefix: "/tracking" });
       await v1.register(notificationRoutes, { prefix: "/notifications" });
       await v1.register(analyticsRoutes, { prefix: "/analytics" });
+      await v1.register(searchRoutes, { prefix: "/search" });
       await v1.register(fileRoutes, { prefix: "/files" });
     },
     { prefix: "/api/v1" },

@@ -23,7 +23,10 @@ function sniff(buffer: Buffer): "jpeg" | "png" | "webp" | null {
  * Validate and normalize an uploaded photo. Re-encoding drops EXIF metadata (including
  * GPS position) and anything appended to the file that is not image data.
  */
-export async function processImage(input: Buffer): Promise<ProcessedImage> {
+export async function processImage(
+  input: Buffer,
+  options: { thumbnail: boolean } = { thumbnail: true },
+): Promise<ProcessedImage> {
   if (!sniff(input)) {
     throw new AppError("UNSUPPORTED_MEDIA_TYPE", "Upload a JPEG, PNG or WebP photo");
   }
@@ -35,11 +38,13 @@ export async function processImage(input: Buffer): Promise<ProcessedImage> {
       .resize({ width: 2000, height: 2000, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 82 })
       .toBuffer({ resolveWithObject: true });
-    const thumbnail = await source
-      .clone()
-      .resize({ width: 480, height: 480, fit: "cover" })
-      .webp({ quality: 72 })
-      .toBuffer();
+    const thumbnail = options.thumbnail
+      ? await source
+          .clone()
+          .resize({ width: 480, height: 480, fit: "cover" })
+          .webp({ quality: 72 })
+          .toBuffer()
+      : null;
     return {
       full: full.data,
       thumbnail,

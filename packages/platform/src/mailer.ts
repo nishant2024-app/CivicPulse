@@ -1,3 +1,4 @@
+import nodemailer from "nodemailer";
 import type { Logger } from "pino";
 
 export interface EmailMessage {
@@ -32,6 +33,26 @@ export function createLogMailer(logger: Logger, options: { logBodies: boolean })
         },
         "email (log driver, not sent)",
       );
+    },
+  };
+}
+
+/** SMTP delivery: Mailpit in the demo cluster, or any provider's SMTP relay. */
+export function createSmtpMailer(url: string, from: string): Mailer {
+  const transport = nodemailer.createTransport({
+    url,
+    connectionTimeout: 5000,
+    socketTimeout: 10_000,
+  });
+  return {
+    driver: "smtp",
+    async send(message) {
+      await transport.sendMail({
+        from,
+        to: message.to,
+        subject: message.subject,
+        text: message.text,
+      });
     },
   };
 }

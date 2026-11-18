@@ -1,7 +1,14 @@
 import { and, eq, inArray } from "drizzle-orm";
-import { departments, notifications, organizationMembers, type Tx } from "@civicpulse/db";
+import {
+  departments,
+  notificationPreferences,
+  notifications,
+  organizationMembers,
+  type Tx,
+} from "@civicpulse/db";
 import { complaintEventPayloadSchema, type EventEnvelope } from "@civicpulse/shared";
-import type { EventConsumer } from "./pump";
+import type { EventDeps, EventHandler } from "../types";
+import { sendNotificationEmail } from "../jobs/mail";
 
 interface Draft {
   userId: string;
@@ -33,10 +40,10 @@ async function departmentManager(tx: Tx, departmentId: string | null): Promise<s
   return row?.managerUserId ? [row.managerUserId] : [];
 }
 
-/** Turns complaint events into in-app notifications for the people they concern. */
-export const notificationConsumer: EventConsumer = {
+/** Turns complaint events into in-app notifications, and queues emails where people want them. */
+export const notificationHandler: EventHandler = {
   group: "notification",
-  async handle(tx, event: EventEnvelope) {
+  async handle(tx, event: EventEnvelope, deps: EventDeps) {
     if (!event.type.startsWith("complaint.") || !event.organizationId) return;
     const p = complaintEventPayloadSchema.parse(event.payload);
     const ref = `${p.trackingId} “${p.title}”`;
@@ -46,6 +53,7 @@ export const notificationConsumer: EventConsumer = {
       drafts.push({ userId: p.reporterId, title, body });
     const toAll = (userIds: string[], title: string, body: string) =>
       userIds.forEach((userId) => drafts.push({ userId, title, body }));
+    const worker = p.assignedWorkerId ? [p.assignedWorkerId] : [];
 
     switch (event.type) {
       case "complaint.created":
@@ -64,9 +72,7 @@ export const notificationConsumer: EventConsumer = {
         break;
       case "complaint.assigned":
         toReporter("Report assigned", `${ref} has been assigned to a team.`);
-        if (p.assignedWorkerId) {
-          toAll([p.assignedWorkerId], "New assignment", `${ref} was assigned to you.${reason}`);
-        }
+        toAll(worker, "New assignment", `${ref} was assigned to you.${reason}`);
         toAll(
           await departmentManager(tx, p.departmentId),
           "Assigned to your department",
@@ -90,7 +96,7 @@ export const notificationConsumer: EventConsumer = {
           [
             ...(await organizationAdmins(tx, event.organizationId)),
             ...(await departmentManager(tx, p.departmentId)),
-            ...(p.assignedWorkerId ? [p.assignedWorkerId] : []),
+            ...worker,
           ],
           "Report reopened",
           `${ref} was reopened.${reason}`,
@@ -98,16 +104,30 @@ export const notificationConsumer: EventConsumer = {
         break;
       case "complaint.commented":
         if (p.byStaff) toReporter("New reply", `There is a new reply on ${ref}.`);
-        else {
+        else
           toAll(
-            [
-              ...(p.assignedWorkerId ? [p.assignedWorkerId] : []),
-              ...(await departmentManager(tx, p.departmentId)),
-            ],
+            [...worker, ...(await departmentManager(tx, p.departmentId))],
             "Reporter replied",
             `The reporter replied on ${ref}.`,
           );
-        }
+        break;
+      case "complaint.sla_warning":
+        toAll(
+          [...worker, ...(await departmentManager(tx, p.departmentId))],
+          "Deadline approaching",
+          `${ref} is close to its resolution deadline.`,
+        );
+        break;
+      case "complaint.sla_breached":
+        toAll(
+          [
+            ...worker,
+            ...(await departmentManager(tx, p.departmentId)),
+            ...(await organizationAdmins(tx, event.organizationId)),
+          ],
+          "Deadline missed",
+          `${ref} passed its resolution deadline.`,
+        );
         break;
       default:
         return;
@@ -116,13 +136,12 @@ export const notificationConsumer: EventConsumer = {
     // Nobody is notified about their own action; one notification per person per event.
     const unique = new Map<string, Draft>();
     for (const draft of drafts) {
-      if (draft.userId !== event.actorId && !unique.has(draft.userId)) {
+      if (draft.userId !== event.actorId && !unique.has(draft.userId))
         unique.set(draft.userId, draft);
-      }
     }
     if (unique.size === 0) return;
 
-    // Only people who are still active members receive anything.
+    // Only active members, honouring each person's preferences.
     const active = await tx
       .select({ userId: organizationMembers.userId })
       .from(organizationMembers)
@@ -133,20 +152,60 @@ export const notificationConsumer: EventConsumer = {
           inArray(organizationMembers.userId, [...unique.keys()]),
         ),
       );
-    const rows = active.map(({ userId }) => {
+    const prefs = new Map(
+      (
+        await tx
+          .select()
+          .from(notificationPreferences)
+          .where(
+            inArray(
+              notificationPreferences.userId,
+              active.map((member) => member.userId),
+            ),
+          )
+      ).map((row) => [row.userId, row]),
+    );
+
+    const rows = active.flatMap(({ userId }) => {
+      const pref = prefs.get(userId);
+      const inApp = pref?.inAppEnabled ?? true;
+      const email = pref?.emailEnabled ?? true;
+      if (pref?.mutedEventTypes.includes(event.type) || (!inApp && !email)) return [];
       const draft = unique.get(userId)!;
-      return {
-        organizationId: event.organizationId!,
-        userId,
-        complaintId: p.complaintId,
-        type: event.type,
-        title: draft.title,
-        body: draft.body,
-        dedupeKey: event.id,
-        // When it happened, not when it was processed: keeps the inbox in true order.
-        createdAt: new Date(event.occurredAt),
-      };
+      return [
+        {
+          organizationId: event.organizationId!,
+          userId,
+          complaintId: p.complaintId,
+          type: event.type,
+          title: draft.title,
+          body: draft.body,
+          dedupeKey: event.id,
+          // When it happened, not when it was processed: keeps the inbox in true order.
+          createdAt: new Date(event.occurredAt),
+          emailStatus: email ? ("QUEUED" as const) : ("NOT_REQUESTED" as const),
+          // In-app switched off: keep the row for email tracking, but do not show it as unread.
+          readAt: inApp ? null : new Date(),
+        },
+      ];
     });
-    if (rows.length) await tx.insert(notifications).values(rows).onConflictDoNothing();
+    if (rows.length === 0) return;
+    const inserted = await tx
+      .insert(notifications)
+      .values(rows)
+      .onConflictDoNothing()
+      .returning({ id: notifications.id, emailStatus: notifications.emailStatus });
+
+    const toEmail = inserted.filter((row) => row.emailStatus === "QUEUED").map((row) => row.id);
+    if (toEmail.length === 0) return;
+    // Queue emails only after the notification rows are committed.
+    return async () => {
+      for (const notificationId of toEmail) {
+        const queued = deps.queues
+          ? await deps.queues.enqueueMail({ kind: "notification", notificationId })
+          : false;
+        if (!queued) await sendNotificationEmail(deps, notificationId, { finalAttempt: true });
+      }
+    };
   },
 };

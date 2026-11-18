@@ -1,0 +1,6 @@
+apiVersion: v2
+name: civicpulse
+description: The CivicPulse application — web, API, background workers, database migrations and ingress. Data services live in the civicpulse-platform chart.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

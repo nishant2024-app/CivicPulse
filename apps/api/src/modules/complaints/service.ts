@@ -18,7 +18,7 @@ import {
   type TenantContext,
   type Tx,
 } from "@civicpulse/db";
-import { generateTrackingId, type ObjectStorage } from "@civicpulse/platform";
+import { generateTrackingId, type JobQueues, type ObjectStorage } from "@civicpulse/platform";
 import {
   availableTransitions,
   checkTransition,
@@ -43,7 +43,7 @@ import {
   type TransitionActor,
 } from "@civicpulse/shared";
 import { AppError, errors, isUniqueViolation } from "../../errors";
-import { emitEvent } from "../../events/emit";
+import { emitEvent } from "@civicpulse/events";
 import { recordAudit } from "../audit/service";
 import type { RequestMeta } from "../auth/service";
 import type { AuthContext } from "../auth/sessions";
@@ -270,8 +270,12 @@ function toSummary(row: SummaryRow): ComplaintSummary {
   };
 }
 
-export async function listComplaints(db: Db, ctx: Ctx, query: ComplaintListQuery) {
-  const filters: Array<SQL | undefined> = [isNull(complaints.deletedAt), visibility(ctx.auth)];
+export async function listComplaints(db: Db, ctx: Ctx, query: ComplaintListQuery, extra?: SQL) {
+  const filters: Array<SQL | undefined> = [
+    isNull(complaints.deletedAt),
+    visibility(ctx.auth),
+    extra,
+  ];
   if (query.status) filters.push(eq(complaints.status, query.status));
   if (query.state === "open") filters.push(inArray(complaints.status, [...OPEN_STATUSES]));
   if (query.state === "overdue") filters.push(overdueSql);
@@ -320,6 +324,26 @@ export async function listComplaints(db: Db, ctx: Ctx, query: ComplaintListQuery
       .offset((query.page - 1) * query.pageSize);
     return { total: totalRow?.value ?? 0, rows: rows.map(toSummary) };
   });
+}
+
+/**
+ * Load summaries for specific IDs, in the given order. This is the authority for search
+ * results: anything the caller may not see, or that no longer exists, is dropped here even
+ * if a stale search index still lists it.
+ */
+export async function summariesByIds(db: Db, ctx: Ctx, ids: string[]): Promise<ComplaintSummary[]> {
+  if (ids.length === 0) return [];
+  const rows = await db.withTenant(ctx, (tx) =>
+    tx
+      .select(summaryColumns)
+      .from(complaints)
+      .innerJoin(complaintCategories, eq(complaintCategories.id, complaints.categoryId))
+      .leftJoin(departments, eq(departments.id, complaints.departmentId))
+      .leftJoin(workerUser, eq(workerUser.id, complaints.assignedWorkerId))
+      .where(and(inArray(complaints.id, ids), isNull(complaints.deletedAt), visibility(ctx.auth))),
+  );
+  const byId = new Map(rows.map((row) => [row.id, toSummary(row)]));
+  return ids.flatMap((id) => (byId.has(id) ? [byId.get(id)!] : []));
 }
 
 /* ---------- detail ---------- */
@@ -457,15 +481,18 @@ export async function getComplaint(
           entry.userId && entry.userName ? { id: entry.userId, fullName: entry.userName } : null,
         createdAt: entry.createdAt.toISOString(),
       })),
-      attachments: attachments.map((attachment) => ({
-        id: attachment.id,
-        kind: attachment.kind,
-        url: storage.signedUrl(attachment.storageKey),
-        thumbnailUrl: storage.signedUrl(attachment.thumbnailKey ?? attachment.storageKey),
-        width: attachment.width,
-        height: attachment.height,
-        createdAt: attachment.createdAt.toISOString(),
-      })),
+      attachments: await Promise.all(
+        attachments.map(async (attachment) => ({
+          id: attachment.id,
+          kind: attachment.kind,
+          url: await storage.signedUrl(attachment.storageKey),
+          // Until a worker has made the thumbnail, the full image stands in for it.
+          thumbnailUrl: await storage.signedUrl(attachment.thumbnailKey ?? attachment.storageKey),
+          width: attachment.width,
+          height: attachment.height,
+          createdAt: attachment.createdAt.toISOString(),
+        })),
+      ),
       comments: comments.map((comment) => ({
         id: comment.id,
         body: comment.body,
@@ -870,7 +897,8 @@ export async function submitFeedback(
 
 export interface ProcessedImage {
   full: Buffer;
-  thumbnail: Buffer;
+  /** Absent when a worker will create the thumbnail after the upload. */
+  thumbnail: Buffer | null;
   width: number;
   height: number;
   checksum: string;
@@ -879,6 +907,7 @@ export interface ProcessedImage {
 export async function addAttachment(
   db: Db,
   storage: ObjectStorage,
+  queues: JobQueues | null,
   ctx: Ctx,
   id: string,
   image: ProcessedImage,
@@ -887,7 +916,7 @@ export async function addAttachment(
   const fileId = randomUUID();
   const base = `org/${ctx.organizationId}/complaints/${id}/${fileId}`;
   const storageKey = `${base}.webp`;
-  const thumbnailKey = `${base}.thumb.webp`;
+  const thumbnailKey = image.thumbnail ? `${base}.thumb.webp` : null;
 
   // Authorize and decide the kind before any bytes are stored.
   const kind = await db.withTenant(ctx, async (tx) => {
@@ -909,9 +938,10 @@ export async function addAttachment(
   });
 
   await storage.put(storageKey, image.full, "image/webp");
-  await storage.put(thumbnailKey, image.thumbnail, "image/webp");
+  if (image.thumbnail && thumbnailKey)
+    await storage.put(thumbnailKey, image.thumbnail, "image/webp");
   try {
-    return await db.withTenant(ctx, async (tx) => {
+    const created = await db.withTenant(ctx, async (tx) => {
       const complaint = await lockVisible(tx, ctx, id);
       const [row] = await tx
         .insert(complaintAttachments)
@@ -927,15 +957,29 @@ export async function addAttachment(
           width: image.width,
           height: image.height,
           checksumSha256: image.checksum,
-          processingStatus: "READY",
+          processingStatus: image.thumbnail ? "READY" : "PENDING",
         })
         .returning({ id: complaintAttachments.id });
       await emitComplaintEvent(tx, ctx, "complaint.attachment_added", complaint, meta);
       return { id: row!.id };
     });
+    if (!image.thumbnail) {
+      // The photo is already usable (the UI falls back to it). If the queue is unreachable,
+      // the scheduled sweep picks the attachment up later.
+      await queues?.enqueueMedia({
+        kind: "thumbnail",
+        organizationId: ctx.organizationId,
+        complaintId: id,
+        attachmentId: created.id,
+      });
+    }
+    return created;
   } catch (error) {
     // Do not leave orphaned objects behind when the database write fails.
-    await Promise.allSettled([storage.delete(storageKey), storage.delete(thumbnailKey)]);
+    await Promise.allSettled([
+      storage.delete(storageKey),
+      ...(thumbnailKey ? [storage.delete(thumbnailKey)] : []),
+    ]);
     throw error;
   }
 }

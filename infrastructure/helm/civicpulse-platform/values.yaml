@@ -1,0 +1,94 @@
+# Secrets are never stored in this chart. It reads one Secret that the bootstrap (Terraform,
+# or `kubectl create secret`) creates before the first sync. Keys it must contain:
+#   postgres-password, grafana-admin-password, s3-config.json
+existingSecret: civicpulse-secrets
+
+# Public host names (served by the ingress controller). *.localtest.me resolves to 127.0.0.1.
+ingress:
+  enabled: true
+  className: traefik
+  hosts:
+    grafana: grafana.localtest.me
+    jaeger: jaeger.localtest.me
+    prometheus: prometheus.localtest.me
+    mail: mail.localtest.me
+
+postgres:
+  enabled: true
+  image: postgres:16-alpine
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 256Mi }
+    limits: { memory: 512Mi }
+
+redis:
+  enabled: true
+  image: redis:7-alpine
+  maxMemory: 128mb
+  resources:
+    requests: { cpu: 50m, memory: 96Mi }
+    limits: { memory: 192Mi }
+
+kafka:
+  enabled: true
+  image: apache/kafka:4.4.0
+  heap: "-Xms384m -Xmx384m"
+  storage: 2Gi
+  resources:
+    requests: { cpu: 200m, memory: 640Mi }
+    limits: { memory: 896Mi }
+
+opensearch:
+  enabled: true
+  image: opensearchproject/opensearch:3.3.0
+  heap: "-Xms512m -Xmx512m"
+  storage: 2Gi
+  resources:
+    requests: { cpu: 200m, memory: 1Gi }
+    limits: { memory: 1536Mi }
+
+# S3-compatible object storage (MinIO's community images were discontinued).
+seaweedfs:
+  enabled: true
+  image: chrislusf/seaweedfs:4.54
+  storage: 2Gi
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 512Mi }
+
+# Catches outgoing email so the notification path can be verified without a provider.
+mailpit:
+  enabled: true
+  image: axllent/mailpit:v1.34.0
+  resources:
+    requests: { cpu: 20m, memory: 32Mi }
+    limits: { memory: 128Mi }
+
+otelCollector:
+  enabled: true
+  image: otel/opentelemetry-collector-contrib:0.140.0
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 256Mi }
+
+jaeger:
+  enabled: true
+  image: jaegertracing/jaeger:2.23.0
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 384Mi }
+
+prometheus:
+  enabled: true
+  image: prom/prometheus:v3.5.0
+  retention: 6h
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 384Mi }
+
+grafana:
+  enabled: true
+  image: grafana/grafana:12.2.0
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 320Mi }

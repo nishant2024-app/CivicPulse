@@ -14,6 +14,7 @@ const PROTECTED = [
   "/departments",
   "/members",
   "/audit",
+  "/search",
 ];
 const GUEST_ONLY = ["/login", "/register"];
 

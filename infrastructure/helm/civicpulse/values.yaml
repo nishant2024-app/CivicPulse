@@ -1,0 +1,79 @@
+# Image names are "<prefix>-api", "<prefix>-workers" and "<prefix>-web".
+image:
+  prefix: ghcr.io/nishant2024-app/civicpulse
+  tag: ""            # defaults to the chart's appVersion; CI sets it to the commit SHA
+  pullPolicy: IfNotPresent
+
+# Secrets are read from one Secret created outside Git (see docs/deployment).
+# Keys: database-url, session-secret, s3-access-key-id, s3-secret-access-key, seed-password
+existingSecret: civicpulse-secrets
+
+# Public address of the web app. Used for CSRF checks and links in emails.
+webOrigin: https://civicpulse.example.org
+
+ingress:
+  enabled: true
+  className: traefik
+  host: civicpulse.example.org
+  annotations: {}
+  tls: []
+
+# Environment of the API and workers. Defaults point at the in-cluster platform chart; to use
+# managed services (Neon, Upstash, Aiven, R2), override the matching entries.
+config:
+  NODE_ENV: production
+  LOG_LEVEL: info
+  TRUST_PROXY: "true"
+  EMBEDDED_WORKERS: "false"
+  RATE_LIMIT_ENABLED: "true"
+  API_DOCS_ENABLED: "false"
+  SELF_SERVICE_ORGANIZATIONS: "true"
+  REDIS_URL: redis://redis:6379
+  EVENT_BROKER: kafka
+  KAFKA_BROKERS: kafka:9092
+  SEARCH_DRIVER: opensearch
+  OPENSEARCH_URL: http://opensearch:9200
+  STORAGE_DRIVER: s3
+  S3_ENDPOINT: http://seaweedfs:8333
+  S3_BUCKET: civicpulse
+  S3_REGION: us-east-1
+  EMAIL_DRIVER: smtp
+  SMTP_URL: smtp://mailpit:1025
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318
+
+# Demonstration clusters are reached over plain HTTP. Never set in a real deployment.
+allowInsecureHttp: false
+
+api:
+  replicas: 2
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 384Mi }
+
+web:
+  replicas: 2
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 320Mi }
+
+workers:
+  replicas: 1
+  resources:
+    requests: { cpu: 100m, memory: 192Mi }
+    limits: { memory: 384Mi }
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+
+podDisruptionBudget:
+  enabled: true
+
+migrations:
+  enabled: true
+
+# Creates the demo organization and one account per role. Demonstration only.
+seed:
+  enabled: false
