@@ -2,25 +2,25 @@ apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: civicpulse-root
-  namespace: { { .Release.Namespace } }
+  namespace: {{ .Release.Namespace }}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: { { .Values.repoURL } }
-    targetRevision: { { .Values.targetRevision } }
+    repoURL: {{ .Values.repoURL }}
+    targetRevision: {{ .Values.targetRevision }}
     path: infrastructure/argocd/apps
     helm:
       parameters:
-        - { name: repoURL, value: { { .Values.repoURL | quote } } }
-        - { name: targetRevision, value: { { .Values.targetRevision | quote } } }
-        - { name: imageTag, value: { { .Values.imageTag | quote } } }
-        - { name: imagePrefix, value: { { .Values.imagePrefix | quote } } }
-        - { name: appValueFile, value: { { .Values.appValueFile | quote } } }
+        - { name: repoURL, value: {{ .Values.repoURL | quote }} }
+        - { name: targetRevision, value: {{ .Values.targetRevision | quote }} }
+        - { name: imageTag, value: {{ .Values.imageTag | quote }} }
+        - { name: imagePrefix, value: {{ .Values.imagePrefix | quote }} }
+        - { name: appValueFile, value: {{ .Values.appValueFile | quote }} }
   destination:
     server: https://kubernetes.default.svc
-    namespace: { { .Release.Namespace } }
+    namespace: {{ .Release.Namespace }}
   syncPolicy:
     automated: { prune: true, selfHeal: true }
     retry:

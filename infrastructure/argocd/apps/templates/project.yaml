@@ -2,13 +2,13 @@ apiVersion: argoproj.io/v1alpha1
 kind: AppProject
 metadata:
   name: civicpulse
-  namespace: { { .Release.Namespace } }
+  namespace: {{ .Release.Namespace }}
 spec:
   description: CivicPulse application and platform
   sourceRepos:
-    - { { .Values.repoURL } }
+    - {{ .Values.repoURL }}
   destinations:
-    - { server: https://kubernetes.default.svc, namespace: { { .Values.namespace } } }
+    - { server: https://kubernetes.default.svc, namespace: {{ .Values.namespace }} }
   # Namespaced resources only: this project cannot create cluster-wide objects.
   clusterResourceWhitelist: []
   namespaceResourceWhitelist:

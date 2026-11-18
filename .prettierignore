@@ -5,3 +5,5 @@ pnpm-lock.yaml
 packages/db/migrations
 coverage
 infrastructure/helm
+infrastructure/argocd
+docker-compose*.yml
