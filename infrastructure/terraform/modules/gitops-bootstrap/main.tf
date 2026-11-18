@@ -22,7 +22,7 @@ resource "helm_release" "traefik" {
 
   values = [yamlencode({
     deployment = { replicas = 1 }
-    service    = { type = "ClusterIP" }
+    service    = { spec = { type = "ClusterIP" } }
     ports = {
       web       = { hostPort = 80 }
       websecure = { expose = { default = false } }
