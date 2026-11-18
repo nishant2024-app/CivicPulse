@@ -62,6 +62,17 @@ resource "helm_release" "argocd" {
   values = [yamlencode({
     configs = {
       params = { "server.insecure" = true } # TLS is terminated at the ingress
+      cm = {
+        # Traefik here has no load balancer, so an Ingress never gets a published address and
+        # Argo CD would report it Progressing forever. The Ingress is healthy once it exists;
+        # real reachability is proven by the browser tests that go through it.
+        "resource.customizations.health.networking.k8s.io_Ingress" = <<-LUA
+          hs = {}
+          hs.status = "Healthy"
+          hs.message = "Ingress accepted (address publication ignored)"
+          return hs
+        LUA
+      }
     }
     dex            = { enabled = false }
     notifications  = { enabled = false }

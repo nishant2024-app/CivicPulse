@@ -343,6 +343,11 @@ spec:
       containers:
         - name: mailpit
           image: {{ .Values.mailpit.image }}
+          env:
+            # Mailpit keeps its message store in a SQLite file; the root filesystem is read-only.
+            - { name: MP_DATABASE, value: /data/mailpit.db }
+          volumeMounts:
+            - { name: data, mountPath: /data }
           ports:
             - { name: smtp, containerPort: 1025 }
             - { name: http, containerPort: 8025 }
@@ -354,4 +359,6 @@ spec:
             readOnlyRootFilesystem: true
             capabilities: { drop: ["ALL"] }
           resources: {{- toYaml .Values.mailpit.resources | nindent 12 }}
+      volumes:
+        - { name: data, emptyDir: { sizeLimit: 64Mi } }
 {{- end }}
