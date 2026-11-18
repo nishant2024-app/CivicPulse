@@ -6,37 +6,46 @@ CivicPulse is a multi-tenant platform for community issue reporting: citizens re
 problems such as potholes, broken streetlights or water leaks; organizations verify,
 assign and resolve them; everyone can follow the progress.
 
-> **Project status: Phases 0–2 of 6 complete.** The product works end to end on
-> PostgreSQL alone: report → verify → assign → work → resolve → confirm, with
-> notifications, public tracking and live analytics. Redis, Kafka, OpenSearch, R2,
-> observability and deployment are not built yet. The itemized ledger is
-> [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md).
+It is built as a real distributed system, and every component of the
+[Request Journey](docs/architecture/REQUEST_JOURNEY.md) diagram runs at **zero cost, with no credit
+card**: Traefik, Fastify, BullMQ, Kafka, PostgreSQL, Redis, OpenSearch, S3-compatible storage,
+OpenTelemetry, Prometheus, Grafana, Jaeger, Docker, GitHub Actions, Helm, Argo CD, Terraform
+and Kubernetes. The one box that cannot be free, AWS ECS, is written and validated but never
+deployed ([why](docs/deployment/ECS.md)).
 
-## What works today
+## What is proven, and where
 
-- **Citizens:** register, report an issue (category, description, location, map pin,
-  photos), get a tracking ID, follow status, reply, reopen, rate the resolution.
-- **Administrators and department managers:** triage queue, verify/reject, assign to a
-  department and worker, set priority, internal notes, departments, category routing,
-  member roles, audit log, dashboard with real figures.
-- **Field workers:** assigned work ordered by deadline, accept, progress, upload evidence, resolve.
-- **Public:** track any report by ID without an account; no personal data is shown.
-- **Platform:** multi-tenant isolation by PostgreSQL row-level security, append-only
-  history, transactional outbox with retries and dead-lettering, OpenAPI docs at `/api/docs`.
+The honest ledger is [docs/DEVELOPMENT_ROADMAP.md](docs/DEVELOPMENT_ROADMAP.md). In short:
 
-## Requirements
+| Claim                                                                                             | Evidence                                                              |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Application features, tenant isolation, events, search, storage, queues                           | Unit, API and integration tests; 13 browser tests (CI workflow)       |
+| Redis, Kafka, OpenSearch and S3 behave as designed                                                | Integration tests against the real services (CI "Integration" job)    |
+| The whole stack runs in Kubernetes, deployed by Terraform → Argo CD, serving real browser traffic | "Cluster demo" workflow: kind cluster, 13 browser tests, 17 checks    |
+| A bad release is stopped and rolled back with no failed request                                   | Same workflow: `scripts/rollout-demo.py`                              |
+| Five failure drills (workers, Redis, OpenSearch, Kafka, mail provider down)                       | Same workflow: `scripts/drills.py kube`                               |
+| Images published to GHCR                                                                          | **Not yet run:** `images.yml` only triggers after CI passes on `main` |
+| ECS                                                                                               | Validated only; never applied                                         |
+| Load test, backup/restore drill                                                                   | **Not done**                                                          |
 
-- Node.js 22 and pnpm 10 (`corepack enable`)
-- A PostgreSQL 15+ database — a free [Neon](https://neon.com) project, or a local install
+## Ways to run it
 
-Nothing else. No Docker, Redis or Kafka is needed to run what exists today.
+| Mode               | Needs                         | You get                                                                               |
+| ------------------ | ----------------------------- | ------------------------------------------------------------------------------------- |
+| **Lite**           | Node 22, pnpm, PostgreSQL 15+ | The application, with in-process fallbacks for queue, events, search, storage         |
+| **Compose stack**  | Docker, about 6 GB free RAM   | Every service as a container (`docker-compose.stack.yml`)                             |
+| **Kubernetes**     | Docker, Terraform, 16 GB RAM  | The full GitOps path on a local kind cluster ([guide](docs/deployment/KUBERNETES.md)) |
+| **GitHub Actions** | A fork of this public repo    | The Kubernetes mode on a free runner: run the **Cluster demo** workflow               |
 
-## Run it
+Where it can run for free, and what cannot: [zero-cost guide](docs/deployment/ZERO_COST_GUIDE.md).
+There is no free always-on hosting for a cluster; this project is demonstrable on demand.
+
+### Lite mode
 
 ```bash
 pnpm install
 cp .env.example .env          # then set DATABASE_URL
-pnpm db:migrate               # create tables, policies, triggers
+pnpm db:migrate               # tables, policies, triggers
 pnpm db:seed                  # optional: demo organization with one account per role
 pnpm dev                      # API on :4000, web on :3000
 ```
@@ -53,46 +62,69 @@ Seeded accounts (password `civicpulse-demo-1`, or `SEED_PASSWORD` if you set it)
 | Field worker       | `worker@demo.civicpulse.local`  |
 | Citizen            | `citizen@demo.civicpulse.local` |
 
-**Using Neon:** copy the _pooled_ connection string into `DATABASE_URL`. The database
-role must be allowed to create a role (`civicpulse_app`), which the default Neon owner
-role is. This has been tested against local PostgreSQL 16, not yet against Neon itself.
+### Compose stack
+
+```bash
+docker compose -f docker-compose.stack.yml up -d --build --wait
+```
+
+### Kubernetes (kind, Terraform, Argo CD)
+
+See [docs/deployment/KUBERNETES.md](docs/deployment/KUBERNETES.md). In GitHub: Actions →
+**Cluster demo** → Run workflow.
+
+## What the application does
+
+- **Citizens:** register, report an issue (category, description, location, photos), get a
+  tracking ID, follow status, reopen, rate the resolution.
+- **Administrators and managers:** triage, verify or reject, assign to a department and worker,
+  internal notes, categories, roles, audit log, analytics from real records.
+- **Field workers:** assigned work by deadline, accept, progress, evidence, resolve.
+- **Public:** track any report by ID without an account; no personal data shown.
+- **Search:** full-text search with highlights (OpenSearch, PostgreSQL fallback).
+- **Platform:** tenant isolation by row-level security, append-only history, transactional
+  outbox → Kafka, idempotent consumers with dead-lettering, SLA scheduler, email via queue.
 
 ## Verify it
 
 ```bash
-pnpm typecheck
-pnpm lint
-pnpm test        # needs TEST_DATABASE_URL: a database whose name contains "test"
+pnpm typecheck && pnpm lint && pnpm format:check
+pnpm test                 # needs TEST_DATABASE_URL (a database whose name contains "test")
+pnpm test:integration     # needs `docker compose -f docker-compose.deps.yml up -d --wait`
 pnpm build
-pnpm test:e2e    # browser tests; starts the app if it is not running
+pnpm test:e2e             # browser tests
 ```
 
-Integration tests truncate tables, so they refuse to run against a database whose name
-does not contain `test`. Default:
-`postgres://civicpulse:civicpulse@localhost:5432/civicpulse_test`.
+Tests truncate tables, so they refuse to run against a database whose name does not contain `test`.
 
 ## Repository layout
 
 ```
 apps/web            Next.js 16 UI
-apps/api            Fastify 5 REST API (modules under src/modules)
-apps/workers        Background workers (Phase 3)
-packages/shared     Contracts: Zod schemas, enums, status machine, permission matrix
-packages/db         Drizzle schema, SQL migrations, tenant-scoped database access
-packages/platform   Config validation, logging, tokens, mailer
+apps/api            Fastify 5 REST API
+apps/workers        Outbox relay, Kafka consumers, BullMQ workers, scheduler, redrive tools
+packages/shared     Contracts: Zod schemas, enums, status machine, permissions
+packages/db         Drizzle schema, SQL migrations, tenant-scoped access
+packages/platform   Config, logging, cache, queues, search, storage, metrics, tracing
+packages/events     Outbox, relay, consumers, Kafka adapter, jobs
+infrastructure/     Docker, Helm charts, Argo CD, Terraform (kind, GitOps, ECS), compose files
+scripts/            Dashboards, cluster verification, rollout and failure drills
 e2e                 Playwright tests
-docs                Architecture, database, API, events, security, infrastructure
+docs                Architecture, database, API, events, security, operations, deployment
 ```
 
 ## Documentation
 
-| Document                                                   | Contents                                                              |
-| ---------------------------------------------------------- | --------------------------------------------------------------------- |
-| [Project plan](docs/PROJECT_PLAN.md)                       | Scope, constraints, verified free-tier services, technology decisions |
-| [System design](docs/architecture/SYSTEM_DESIGN.md)        | Architecture, request path, multi-tenancy, failure behaviour          |
-| [Database design](docs/database/DATABASE_DESIGN.md)        | ER diagram, tables, indexes, row-level security, retention            |
-| [API specification](docs/api/API_SPECIFICATION.md)         | Conventions and endpoint map                                          |
-| [Event design](docs/architecture/EVENT_DESIGN.md)          | Outbox, Kafka topics, consumers, retries                              |
-| [Security](docs/security/SECURITY.md)                      | Threat model and controls                                             |
-| [Infrastructure](docs/deployment/INFRASTRUCTURE_DESIGN.md) | Containers, CI/CD, Kubernetes, Terraform, observability               |
-| [Roadmap and status](docs/DEVELOPMENT_ROADMAP.md)          | What is tested, untested, configured only, or planned                 |
+| Document                                                                                                                    | Contents                                             |
+| --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| [Request journey](docs/architecture/REQUEST_JOURNEY.md)                                                                     | The diagram, box by box, with the proof for each     |
+| [Decision 0001](docs/decisions/0001-zero-cost-full-stack.md)                                                                | Why everything is self-hosted in Kubernetes          |
+| [System design](docs/architecture/SYSTEM_DESIGN.md)                                                                         | Architecture, request path, multi-tenancy            |
+| [Event design](docs/architecture/EVENT_DESIGN.md)                                                                           | Outbox, Kafka, consumers, retries                    |
+| [Observability](docs/operations/OBSERVABILITY.md)                                                                           | Metrics, traces, dashboards, failure drills          |
+| [Kubernetes guide](docs/deployment/KUBERNETES.md)                                                                           | Terraform, Argo CD, rollout and rollback             |
+| [Zero-cost guide](docs/deployment/ZERO_COST_GUIDE.md)                                                                       | Where it runs free, limits, what cannot              |
+| [ECS](docs/deployment/ECS.md)                                                                                               | The alternative target, validated only               |
+| [Troubleshooting](docs/deployment/TROUBLESHOOTING.md)                                                                       | Known problems and fixes                             |
+| [Database](docs/database/DATABASE_DESIGN.md) · [API](docs/api/API_SPECIFICATION.md) · [Security](docs/security/SECURITY.md) | Reference                                            |
+| [Roadmap and status](docs/DEVELOPMENT_ROADMAP.md)                                                                           | What is tested, untested, configured only or planned |

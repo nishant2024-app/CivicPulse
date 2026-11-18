@@ -84,23 +84,60 @@ notification consumer, because notifications are part of the core experience.
 
 ## Phase 3 — Distributed systems
 
-Redis cache and rate limiting, BullMQ queues, outbox relay, Kafka broker adapter,
-notification/search/analytics consumers, OpenSearch adapter, S3/R2 adapter, image
-processing, SLA scheduler. **planned**
+| Item                                                                               | Status               | Evidence                                                                |
+| ---------------------------------------------------------------------------------- | -------------------- | ----------------------------------------------------------------------- |
+| Outbox relay (ordered, `SKIP LOCKED`, backoff) and idempotent consumers            | tested               | `apps/api/test/complaints.test.ts`, Kafka integration test              |
+| Kafka producer and three consumer groups, dead-letter topic, redrive tool          | tested               | `kafka.integration.test.ts` against Apache Kafka 4.4.0; cluster drills  |
+| Redis cache and shared rate limit (fail open)                                      | tested               | `redis.integration.test.ts`; Redis drill                                |
+| BullMQ queues (mail, media, scheduler), retries, never blocks when Redis is down   | tested               | `redis.integration.test.ts`                                             |
+| OpenSearch indexing, search API with highlights, PostgreSQL fallback, reindex tool | tested               | `opensearch.integration.test.ts`, browser search test, OpenSearch drill |
+| S3-compatible storage (signed URLs) against SeaweedFS                              | tested               | `s3.integration.test.ts`                                                |
+| Image processing and thumbnails via queue, SLA scheduler, retention                | tested               | API tests; scheduler runs in the cluster (not asserted individually)    |
+| Email through the queue (SMTP to Mailpit in the cluster)                           | tested               | Mail provider drill                                                     |
+| Neon, Upstash, Aiven, R2 as managed back ends                                      | implemented-untested | Configuration only; the design runs everything self-hosted              |
 
 ## Phase 4 — Observability
 
-Prometheus metrics, OpenTelemetry tracing with context propagation through the outbox,
-Grafana dashboards, Jaeger, failure drills. **planned**
+| Item                                                                  | Status               | Evidence                                                        |
+| --------------------------------------------------------------------- | -------------------- | --------------------------------------------------------------- |
+| Prometheus metrics on the API and workers                             | tested               | Scraped in the cluster run; dashboards query them               |
+| OpenTelemetry tracing with propagation through outbox, Kafka and jobs | tested               | `tracing.test.ts`; Jaeger trace check on Compose                |
+| Six Grafana dashboards, provisioned and kept in sync by CI            | tested               | 49 queries valid; 39 return data (the rest have no data yet)    |
+| Failure drills (5)                                                    | tested               | Compose and Kubernetes ("Cluster demo")                         |
+| Alert rules and on-call routing                                       | planned              |                                                                 |
+| Jaeger trace check inside the cluster                                 | implemented-untested | Verified on Compose; the cluster verifier checks the components |
 
 ## Phase 5 — DevOps
 
-Dockerfiles, GitHub Actions (CI, images, infra validation, ephemeral cluster demo),
-Terraform modules, Helm chart, Kubernetes manifests, Argo CD, ECS documentation.
-**planned**
+| Item                                                                 | Status                  | Evidence                                                                            |
+| -------------------------------------------------------------------- | ----------------------- | ----------------------------------------------------------------------------------- |
+| Multi-stage Dockerfile (api, workers, web), non-root, healthchecks   | tested                  | Built and run in CI and the cluster                                                 |
+| CI: lint, types, unit, integration (real services), browser tests    | tested                  | `ci.yml`, green on the latest commit                                                |
+| Helm charts (platform, application), values per environment          | tested                  | Lint (Helm 3 and 4), kubeconform, and deployed in the cluster run                   |
+| Terraform: kind cluster, secrets, Traefik, Argo CD, root application | tested                  | `cluster-demo.yml`; `infra.yml` runs fmt and validate                               |
+| Argo CD app-of-apps, sync waves, self-heal                           | tested                  | Cluster run: both applications Synced and Healthy                                   |
+| Zero-downtime release, blocked bad release, rollback                 | tested                  | `rollout-demo.py`: 0 failed requests; the bad image is stopped at the migration job |
+| Kubernetes failure drills                                            | tested                  | `drills.py kube` in the cluster run                                                 |
+| Image publishing to GHCR                                             | configured-not-deployed | `images.yml` has never run: it triggers after CI passes on `main`                   |
+| ECS Fargate module                                                   | configured-not-deployed | `terraform validate` only; never applied (needs a paid AWS account)                 |
+| Automatic deploy on push (image tag bump in Git)                     | planned                 | Argo CD syncs Git; the tag is set by Terraform/values today                         |
+| NetworkPolicies, TLS inside the cluster                              | planned                 | kind's default network plugin does not enforce NetworkPolicies                      |
 
 ## Phase 6 — Production readiness
 
-Security review, load test with recorded numbers, backup/restore drill, README,
-deployment guide, zero-cost guide, troubleshooting guide, demonstration scenarios.
-**planned**
+| Item                                                   | Status       | Notes                                                           |
+| ------------------------------------------------------ | ------------ | --------------------------------------------------------------- |
+| README, Kubernetes, zero-cost, ECS, observability docs | done         |                                                                 |
+| Troubleshooting guide                                  | done         |                                                                 |
+| Security review of the new components                  | partial      | Known limitations are listed in SECURITY.md; no external review |
+| Load test with recorded numbers                        | planned      | No performance figures are claimed                              |
+| Backup and restore drill                               | planned      |                                                                 |
+| Permanent public hosting                               | not possible | No free, card-less, always-on Kubernetes exists                 |
+
+## Known limitations of the demonstration
+
+- Every data service runs as a single replica with ephemeral storage in CI. This shows the
+  design works; it is not a high-availability setup.
+- The cluster workflow runs on a free GitHub runner and takes about 25 minutes.
+- Two test fixes were needed while getting the cluster run green; all were test
+  timing (a click before hydration, a slow first page load), not product behaviour.

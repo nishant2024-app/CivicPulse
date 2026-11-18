@@ -49,7 +49,7 @@ again on restart. That is the reason every consumer is idempotent.
 
 ## 3. Topics
 
-Three topics, inside the five-topic cap of the Aiven free tier.
+Three topics, created at startup by the workers (`ensureTopics`) with a configurable prefix.
 
 | Topic                   | Key             | Events                                                        |
 | ----------------------- | --------------- | ------------------------------------------------------------- |
@@ -138,15 +138,16 @@ the same process, through the same `EventBroker` interface and the same consumer
 (idempotency, retries, dead-lettering). Durability comes from the outbox. Limitations,
 stated plainly: no replay, no independent consumer scaling, relay and consumers must
 share a process. It exists so the product works with zero infrastructure; it is not a
-substitute for demonstrating Kafka, which is done against Aiven or an ephemeral Redpanda
-container in CI.
+substitute for Kafka: Kafka is exercised against Apache Kafka in the integration tests, and
+in the Kubernetes cluster run.
 
 ## 9. BullMQ queues
 
-| Queue           | Jobs                                                      | Notes                       |
-| --------------- | --------------------------------------------------------- | --------------------------- |
-| `notifications` | `email.send`                                              | Concurrency 5               |
-| `media`         | `image.process` (validate, strip EXIF, resize, thumbnail) | Concurrency 2, memory-bound |
+| Queue       | Jobs                                            | Notes                                       |
+| ----------- | ----------------------------------------------- | ------------------------------------------- |
+| `mail`      | `send-notification-email`, password-reset email | Retries 5x, exponential backoff from 5 s    |
+| `media`     | thumbnail generation                            | Memory-bound                                |
+| `scheduler` | `sla-scan` (every 5 min), `retention` (daily)   | Repeatable jobs; one replica runs each tick |
 
 Scheduled work (SLA scan every 5 minutes, retention cleanup daily) uses BullMQ job
 schedulers when Redis is available and `setInterval` with a Postgres advisory lock

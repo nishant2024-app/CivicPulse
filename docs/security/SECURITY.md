@@ -126,3 +126,18 @@ keeping the organization's complaint record intact. A daily job enforces retenti
   who can run arbitrary SQL on the connection.
 - Uploaded images are not virus-scanned; they are re-encoded, which removes non-image
   payloads.
+- **Password-reset links pass through Redis.** Reset emails are sent by a queued job, so the
+  link (a single-use token) is stored in the job payload while it waits. Redis must be
+  private to the cluster.
+- **The demo cluster is not hardened.** OpenSearch security is disabled (it is only reachable
+  inside the namespace), data services have no authentication beyond network isolation, kind's
+  default network plugin does not enforce NetworkPolicies, and traffic inside the cluster is
+  plain HTTP. `values-prod.yaml` and KUBERNETES.md list what to change for a real cluster.
+- **`ALLOW_INSECURE_HTTP` is demo-only.** It lets the stack run over `http://*.localtest.me`
+  by relaxing the https `WEB_ORIGIN` rule and the `Secure` cookie flag. In production it is the only way to run over plain http, so leave it off.
+- **`/metrics` is not routed through the ingress,** but anything inside the cluster can scrape
+  it. Metrics carry no personal data.
+- **Seed accounts** (`ALLOW_DEMO_SEED`) use a known or generated password and must not be
+  enabled in a real deployment.
+- The new components (Kafka consumers, queue workers, S3 URLs, search) have had no external
+  security review.
