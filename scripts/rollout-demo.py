@@ -67,6 +67,16 @@ def refresh():
             time.sleep(5)
 
 
+def stuck():
+    reasons = k("get", "pods", "-o", "jsonpath={.items[*].status.containerStatuses[*].state.waiting.reason}", ns=args.namespace)
+    return "ImagePull" in reasons or "ErrImage" in reasons
+
+
+def app_state():
+    st = json.loads(k("get", "application", "civicpulse", "-o", "json", ns="argocd"))["status"]
+    return f"{st['sync']['status']} {st['health']['status']}"
+
+
 def health():
     return json.loads(k("get", "application", "civicpulse", "-o", "json", ns="argocd"))["status"]["health"]["status"]
 
@@ -102,18 +112,27 @@ thread = threading.Thread(target=probe, daemon=True)
 thread.start()
 ok = True
 try:
-    print(f"1. Releasing a bad version (image tag 'does-not-exist')")
+    print("1. Releasing a bad version (image tag 'does-not-exist')")
     set_tag("does-not-exist")
-    broken = wait(lambda: "ImagePull" in k("get", "pods", "-l", "app.kubernetes.io/name=api", "-o", "jsonpath={.items[*].status.containerStatuses[*].state.waiting.reason}", ns=args.namespace) or "ErrImageNeverPull" in k("get", "pods", "-l", "app.kubernetes.io/name=api", "-o", "jsonpath={.items[*].status.containerStatuses[*].state.waiting.reason}", ns=args.namespace), 240, "new pod to fail to start")
+    # The migration job runs first (PreSync hook). With an image that cannot be pulled it never
+    # finishes, so Argo CD never reaches the Deployment: the release is stopped at the gate.
+    broken = wait(stuck, 240, "the release to be stopped (image cannot be pulled)")
     ready = k("get", "deploy", "api", "-o", "jsonpath={.status.readyReplicas}", ns=args.namespace)
-    print(f"   new pods cannot start: {broken}; old version still ready replicas: {ready or 0}; Argo CD health: {health()}")
+    print(f"   release blocked: {broken}; old version still ready replicas: {ready or 0}")
+    print(f"   Argo CD: {app_state()}")
     ok &= broken and int(ready or 0) >= 1
     time.sleep(5)
 
     print(f"2. Rolling back to the good version ({args.tag})")
     set_tag(args.tag)
-    healthy = wait(lambda: health() == "Healthy" and "ImagePull" not in k("get", "pods", "-l", "app.kubernetes.io/name=api", "-o", "jsonpath={.items[*].status.containerStatuses[*].state.waiting.reason}", ns=args.namespace), 300, "application to become healthy again")
-    print(f"   Argo CD health: {health()}")
+    # A sync that is waiting on a hook which can never finish has to be stopped before the
+    # corrected revision can be applied. This is what `argocd app terminate-op` does.
+    time.sleep(10)
+    if "Running" in k("get", "application", "civicpulse", "-o", "jsonpath={.status.operationState.phase}", ns="argocd"):
+        k("patch", "application", "civicpulse", "--type", "merge", "-p", '{"status":{"operationState":{"phase":"Terminating"}}}', ns="argocd")
+        refresh()
+    healthy = wait(lambda: app_state().startswith("Synced Healthy") and not stuck(), 420, "application to be Synced and Healthy again")
+    print(f"   Argo CD: {app_state()}")
     ok &= healthy
 finally:
     stop.set()
