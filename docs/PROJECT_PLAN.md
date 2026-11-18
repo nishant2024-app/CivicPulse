@@ -1,5 +1,7 @@
 # CivicPulse — Project Plan
 
+> **Superseded in part (2026-11-18).** This document was written when managed free tiers (Neon, Upstash, Aiven, R2) were the plan. The architecture now self-hosts every component in Kubernetes; see [decision 0001](decisions/0001-zero-cost-full-stack.md) and the [request journey](architecture/REQUEST_JOURNEY.md). Where this text and those disagree, they win. Free-tier figures below were verified in November 2026 and are kept as the optional managed back ends.
+
 > Report Problems. Track Progress. Build Better Communities.
 
 CivicPulse is a multi-tenant platform where citizens report community infrastructure
