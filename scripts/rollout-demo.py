@@ -36,6 +36,19 @@ def set_tag(tag):
     index = next(i for i, p in enumerate(params) if p["name"] == "imageTag")
     patch = json.dumps([{"op": "replace", "path": f"/spec/source/helm/parameters/{index}/value", "value": tag}])
     k("patch", "application", "civicpulse-root", "--type", "json", "-p", patch, ns="argocd")
+    refresh()
+
+
+def refresh():
+    """Ask Argo CD to re-read Git now instead of waiting for its poll interval.
+
+    The change travels root Application -> child Application -> workloads, so each level is
+    refreshed in turn, twice, to give the child time to be re-rendered with the new parameter.
+    """
+    for _ in range(2):
+        for name in ("civicpulse-root", "civicpulse"):
+            k("annotate", "application", name, "argocd.argoproj.io/refresh=hard", "--overwrite", ns="argocd")
+            time.sleep(5)
 
 
 def health():
