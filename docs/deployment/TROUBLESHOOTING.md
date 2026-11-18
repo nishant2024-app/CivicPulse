@@ -2,34 +2,34 @@
 
 ## Starting the stack
 
-| Symptom | Cause and fix |
-| ------- | ------------- |
-| `docker compose up` kills OpenSearch (exit 137) | Not enough memory. Give Docker 6 GB or more, or start only the services you need (`docker compose -f docker-compose.deps.yml up -d redis`). |
-| OpenSearch: `max virtual memory areas vm.max_map_count too low` | Run `sudo sysctl -w vm.max_map_count=262144`. The Kubernetes chart sets `node.store.allow_mmap=false` and does not need it. |
-| OpenSearch: `index_create_block_exception … create-index blocked` | The disk is above the high watermark. The compose file and chart disable the disk threshold; on a real cluster free some space. |
-| Kafka client: connection refused to `localhost:9092` from a container | Containers must use `kafka:19092` (compose) or `kafka:9092` (Kubernetes). `localhost:9092` is only for processes on the host. |
-| SeaweedFS: `InternalError`, logs say `Not enough data nodes found` | SeaweedFS ran out of volume slots (it creates volumes per bucket). The compose file and chart set `-volume.max=32`; use one bucket. |
-| API refuses to start: `Invalid configuration` | The message lists every bad variable. Production also rejects the default `SESSION_SECRET` and a non-https `WEB_ORIGIN` unless `ALLOW_INSECURE_HTTP=true` (demo clusters only). |
+| Symptom                                                               | Cause and fix                                                                                                                                                                   |
+| --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `docker compose up` kills OpenSearch (exit 137)                       | Not enough memory. Give Docker 6 GB or more, or start only the services you need (`docker compose -f docker-compose.deps.yml up -d redis`).                                     |
+| OpenSearch: `max virtual memory areas vm.max_map_count too low`       | Run `sudo sysctl -w vm.max_map_count=262144`. The Kubernetes chart sets `node.store.allow_mmap=false` and does not need it.                                                     |
+| OpenSearch: `index_create_block_exception … create-index blocked`     | The disk is above the high watermark. The compose file and chart disable the disk threshold; on a real cluster free some space.                                                 |
+| Kafka client: connection refused to `localhost:9092` from a container | Containers must use `kafka:19092` (compose) or `kafka:9092` (Kubernetes). `localhost:9092` is only for processes on the host.                                                   |
+| SeaweedFS: `InternalError`, logs say `Not enough data nodes found`    | SeaweedFS ran out of volume slots (it creates volumes per bucket). The compose file and chart set `-volume.max=32`; use one bucket.                                             |
+| API refuses to start: `Invalid configuration`                         | The message lists every bad variable. Production also rejects the default `SESSION_SECRET` and a non-https `WEB_ORIGIN` unless `ALLOW_INSECURE_HTTP=true` (demo clusters only). |
 
 ## Behaviour
 
-| Symptom | Cause and fix |
-| ------- | ------------- |
-| Notifications or search results lag a second or two | Events are processed asynchronously (outbox → Kafka → consumer). Normal. If it persists, check the *Event streaming* dashboard: outbox backlog, consumer lag, dead letters. |
-| Search shows "PostgreSQL (fallback)" | OpenSearch is unreachable or not configured (`SEARCH_DRIVER`). The page keeps working. After an outage run `node dist/redrive.js search-index` in the workers pod, or `pnpm --filter @civicpulse/workers search:reindex` to rebuild the index. |
-| Dead letters accumulate | `select consumer_group, error, count(*) from dead_letter_events where resolved_at is null group by 1, 2;` — fix the cause, then redrive (see above). |
-| Emails never arrive | Check `notifications.email_status`. `QUEUED` with retries pending = provider down (BullMQ retries 5 times over ~75 s, then marks `FAILED`). Open Mailpit (`mail.localtest.me:8080`) in the demo cluster. |
-| Photo thumbnails show the full image | The thumbnail job has not run yet. The scheduler retries pending thumbnails every 5 minutes. |
-| `429 Too many requests` during tests | Rate limiting is on. Set `RATE_LIMIT_ENABLED=false` for local test runs (the kind values do). |
+| Symptom                                             | Cause and fix                                                                                                                                                                                                                                  |
+| --------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Notifications or search results lag a second or two | Events are processed asynchronously (outbox → Kafka → consumer). Normal. If it persists, check the _Event streaming_ dashboard: outbox backlog, consumer lag, dead letters.                                                                    |
+| Search shows "PostgreSQL (fallback)"                | OpenSearch is unreachable or not configured (`SEARCH_DRIVER`). The page keeps working. After an outage run `node dist/redrive.js search-index` in the workers pod, or `pnpm --filter @civicpulse/workers search:reindex` to rebuild the index. |
+| Dead letters accumulate                             | `select consumer_group, error, count(*) from dead_letter_events where resolved_at is null group by 1, 2;` — fix the cause, then redrive (see above).                                                                                           |
+| Emails never arrive                                 | Check `notifications.email_status`. `QUEUED` with retries pending = provider down (BullMQ retries 5 times over ~75 s, then marks `FAILED`). Open Mailpit (`mail.localtest.me:8080`) in the demo cluster.                                       |
+| Photo thumbnails show the full image                | The thumbnail job has not run yet. The scheduler retries pending thumbnails every 5 minutes.                                                                                                                                                   |
+| `429 Too many requests` during tests                | Rate limiting is on. Set `RATE_LIMIT_ENABLED=false` for local test runs (the kind values do).                                                                                                                                                  |
 
 ## Kubernetes demo
 
-| Symptom | Cause and fix |
-| ------- | ------------- |
-| `*.localtest.me` does not resolve | You are offline or your resolver blocks it. Add `127.0.0.1 civicpulse.localtest.me grafana.localtest.me jaeger.localtest.me prometheus.localtest.me mail.localtest.me argocd.localtest.me` to `/etc/hosts`. |
-| Application stuck `Progressing`; pod `ErrImageNeverPull` / `ImagePullBackOff` | The images were not loaded into kind: `kind load docker-image civicpulse-api:<tag> --name civicpulse` (same for workers and web), and make sure `image_tag` matches. |
-| Application `OutOfSync` right after you scaled something | Replica counts are ignored on purpose (autoscalers, drills). Anything else you edit by hand is reverted by self-heal — change Git instead. |
-| `migrate-N` job pending | The database is still starting. The job retries until PostgreSQL answers (30 attempts). |
-| Pods `Pending` | The node is out of memory. The full platform needs about 6 GB; use a larger runner/Codespace or disable components in `values.yaml`. |
-| Argo CD UI login | User `admin`; password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d`. |
-| Grafana login | User `admin`; password from `kubectl -n civicpulse get secret civicpulse-secrets -o jsonpath='{.data.grafana-admin-password}' \| base64 -d`. |
+| Symptom                                                                       | Cause and fix                                                                                                                                                                                               |
+| ----------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `*.localtest.me` does not resolve                                             | You are offline or your resolver blocks it. Add `127.0.0.1 civicpulse.localtest.me grafana.localtest.me jaeger.localtest.me prometheus.localtest.me mail.localtest.me argocd.localtest.me` to `/etc/hosts`. |
+| Application stuck `Progressing`; pod `ErrImageNeverPull` / `ImagePullBackOff` | The images were not loaded into kind: `kind load docker-image civicpulse-api:<tag> --name civicpulse` (same for workers and web), and make sure `image_tag` matches.                                        |
+| Application `OutOfSync` right after you scaled something                      | Replica counts are ignored on purpose (autoscalers, drills). Anything else you edit by hand is reverted by self-heal — change Git instead.                                                                  |
+| `migrate-N` job pending                                                       | The database is still starting. The job retries until PostgreSQL answers (30 attempts).                                                                                                                     |
+| Pods `Pending`                                                                | The node is out of memory. The full platform needs about 6 GB; use a larger runner/Codespace or disable components in `values.yaml`.                                                                        |
+| Argo CD UI login                                                              | User `admin`; password: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' \| base64 -d`.                                                                             |
+| Grafana login                                                                 | User `admin`; password from `kubectl -n civicpulse get secret civicpulse-secrets -o jsonpath='{.data.grafana-admin-password}' \| base64 -d`.                                                                |
