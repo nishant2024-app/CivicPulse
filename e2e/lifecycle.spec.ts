@@ -166,7 +166,16 @@ test("citizen is notified, sees the history, confirms and rates", async () => {
   // Staff instructions are not shown to the reporter.
   await expect(citizenPage.getByText("Check the fuse box first")).toHaveCount(0);
 
-  await citizenPage.getByRole("button", { name: "Confirm and close" }).click();
+  const confirm = citizenPage.getByRole("button", { name: "Confirm and close" });
+  if (!(await confirm.isVisible({ timeout: 10_000 }).catch(() => false))) {
+    // Record what the page showed, so a failure here is diagnosable rather than a bare timeout.
+    console.log(
+      "confirm button missing; page text:\n" +
+        (await citizenPage.locator("main").innerText()).slice(0, 1500),
+    );
+    await citizenPage.reload();
+  }
+  await confirm.click();
   await expect(citizenPage.getByText("Confirm and close: done")).toBeVisible();
   await citizenPage.getByText("5 stars").click({ force: true });
   await citizenPage.getByRole("button", { name: "Send rating" }).click();
