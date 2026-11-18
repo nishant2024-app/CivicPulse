@@ -27,7 +27,23 @@ args = ap.parse_args()
 
 def k(*a, ns=None):
     cmd = ["kubectl"] + (["-n", ns] if ns else []) + list(a)
-    return subprocess.run(cmd, capture_output=True, text=True).stdout.strip()
+    done = subprocess.run(cmd, capture_output=True, text=True)
+    if done.returncode != 0:
+        print(f"   kubectl {' '.join(a[:3])} failed: {done.stderr.strip()[:300]}")
+    return done.stdout.strip()
+
+
+def dump(reason):
+    """Print what the cluster actually looks like, so a failed step explains itself."""
+    print(f"   --- state after: {reason}")
+    for line in (
+        k("get", "application", "civicpulse-root", "-o", "jsonpath={.spec.source.helm.parameters}", ns="argocd"),
+        k("get", "application", "civicpulse", "-o", "jsonpath={.spec.source.helm.parameters}", ns="argocd"),
+        k("get", "application", "civicpulse", "-o", "jsonpath={.status.sync.status} {.status.health.status} {.status.operationState.message}", ns="argocd"),
+        k("get", "deploy", "api", "-o", "jsonpath={.spec.template.spec.containers[0].image} {.status.conditions[*].message}", ns=args.namespace),
+        k("get", "pods", "-l", "app.kubernetes.io/name=api", "-o", "wide", ns=args.namespace),
+    ):
+        print("   ", line)
 
 
 def set_tag(tag):
@@ -62,6 +78,7 @@ def wait(check, timeout, label):
             return True
         time.sleep(3)
     print(f"  timed out waiting for: {label}")
+    dump(label)
     return False
 
 
