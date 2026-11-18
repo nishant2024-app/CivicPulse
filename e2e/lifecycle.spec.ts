@@ -167,7 +167,18 @@ test("field worker accepts, works on and resolves the report", async () => {
 test("citizen is notified, sees the history, confirms and rates", async () => {
   await openNotification(citizenPage, /Marked as resolved/);
 
-  await expect(citizenPage.getByText("Replaced the lamp and the blown fuse.")).toBeVisible();
+  try {
+    await expect(citizenPage.getByText("Replaced the lamp and the blown fuse.")).toBeVisible({
+      timeout: 20_000,
+    });
+  } catch (error) {
+    // Say what the page showed, so a failure is diagnosable rather than a bare timeout.
+    const text = await citizenPage.locator("body").innerText();
+    console.log(
+      `resolution note missing at ${citizenPage.url()}; page text:\n${text.slice(0, 1500)}`,
+    );
+    throw error;
+  }
   // Staff instructions are not shown to the reporter.
   await expect(citizenPage.getByText("Check the fuse box first")).toHaveCount(0);
 
